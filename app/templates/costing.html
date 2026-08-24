@@ -1,0 +1,513 @@
+﻿{% extends "base.html" %}
+{% block title %}Cost Intelligence - ISGEC{% endblock %}
+{% block content %}
+<div class="page-header" style="margin-bottom:24px;">
+    <div class="page-header-title">
+        <h1>Cost Intelligence</h1>
+        <p class="text-muted">Internal cost estimation, margin optimization, and pricing analytics</p>
+    </div>
+</div>
+<div style="display:flex; gap:8px; margin-bottom:24px; border-bottom:1px solid rgba(226,232,240,0.8); padding-bottom:0;">
+    <button class="tab-btn active" onclick="switchTab('history')" id="tab-history">Historical Projects</button>
+    <button class="tab-btn" onclick="switchTab('estimate')" id="tab-estimate">Cost Estimator</button>
+    <button class="tab-btn" onclick="switchTab('winloss')" id="tab-winloss">Win/Loss Analytics</button>
+</div>
+
+<div id="panel-history" class="tab-panel">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:12px;">
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="btn btn-primary" onclick="seedDemo()">Load Demo Data</button>
+            <button class="btn btn-secondary" onclick="document.getElementById('csv-upload').click()">Upload CSV</button>
+            <input type="file" id="csv-upload" accept=".csv" style="display:none;" onchange="uploadCSV(this)">
+            <button class="btn btn-secondary" onclick="toggleAddForm()">Add Project</button>
+        </div>
+        <div id="history-stats" style="font-size:13px; color:#64748b;"></div>
+    </div>
+    <div id="add-form" style="display:none;" class="card">
+        <h4 style="margin-bottom:12px;">Add Historical Project</h4>
+        <form onsubmit="addProject(event)" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(220px,1fr)); gap:10px;">
+            <input name="project_name" placeholder="Project Name *" required class="form-input">
+            <input name="customer_name" placeholder="Customer" class="form-input">
+            <input name="sector" placeholder="Sector" class="form-input">
+            <input name="equipment_category" placeholder="Equipment Category" class="form-input">
+            <textarea name="description" placeholder="Description" class="form-input" rows="2"></textarea>
+            <input name="year" type="number" placeholder="Year" class="form-input">
+            <input name="quantity" type="number" value="1" placeholder="Qty" class="form-input">
+            <input name="weight_kg" type="number" placeholder="Weight (kg)" class="form-input">
+            <select name="complexity" class="form-input"><option value="low">Low</option><option value="medium" selected>Medium</option><option value="high">High</option></select>
+            <input name="material_cost" type="number" step="0.01" placeholder="Material Cost" class="form-input">
+            <input name="labour_cost" type="number" step="0.01" placeholder="Labour Cost" class="form-input">
+            <input name="engineering_cost" type="number" step="0.01" placeholder="Engineering Cost" class="form-input">
+            <input name="overhead_cost" type="number" step="0.01" placeholder="Overhead Cost" class="form-input">
+            <input name="freight_cost" type="number" step="0.01" placeholder="Freight Cost" class="form-input">
+            <input name="quoted_value" type="number" step="0.01" placeholder="Quoted Value" class="form-input">
+            <input name="final_value" type="number" step="0.01" placeholder="Final Value" class="form-input">
+            <select name="outcome" class="form-input"><option value="won">Won</option><option value="lost">Lost</option></select>
+            <input name="lost_reason" placeholder="Lost Reason" class="form-input">
+            <div style="grid-column:1/-1; display:flex; gap:8px; justify-content:flex-end;">
+                <button type="button" class="btn btn-secondary" onclick="toggleAddForm()">Cancel</button>
+                <button type="submit" class="btn btn-primary">Save Project</button>
+            </div>
+        </form>
+    </div>
+    <div class="card" style="overflow-x:auto;">
+        <table style="width:100%; border-collapse:collapse; font-size:13px;">
+            <thead>
+                <tr style="border-bottom:2px solid rgba(226,232,240,0.8); text-align:left;">
+                    <th style="padding:8px 10px;">Project</th>
+                    <th>Sector</th><th>Category</th><th>Year</th><th>Qty</th>
+                    <th style="text-align:right;">Cost</th><th style="text-align:right;">Quoted</th>
+                    <th style="text-align:right;">Margin%</th><th>Outcome</th><th></th>
+                </tr>
+            </thead>
+            <tbody id="projects-tbody"></tbody>
+        </table>
+    </div>
+</div>
+
+<div id="panel-estimate" class="tab-panel" style="display:none;">
+    <div class="card" style="margin-bottom:16px;">
+        <h4 style="margin-bottom:12px;">Generate Cost &amp; Pricing Estimate</h4>
+        <textarea id="est-rfq" placeholder="Paste RFQ text here..." class="form-input" style="width:100%; min-height:80px; margin-bottom:8px;"></textarea>
+        <div style="display:flex; gap:8px; align-items:center;">
+            <input id="est-proposal-id" type="number" placeholder="Or Proposal ID" class="form-input" style="width:200px;">
+            <button class="btn btn-primary" onclick="runEstimate()" id="est-btn">Run Estimate</button>
+        </div>
+    </div>
+    <div id="est-results" style="display:none;">
+        <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(200px,1fr)); gap:12px; margin-bottom:16px;" id="est-cards"></div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;">
+            <div class="card"><h4 style="margin-bottom:8px;">Cost Breakdown</h4><canvas id="breakdown-chart" height="220"></canvas></div>
+            <div class="card"><h4 style="margin-bottom:8px;">Similar Projects</h4><div id="similar-list" style="max-height:260px; overflow-y:auto;"></div></div>
+        </div>
+        <div class="card" style="margin-bottom:16px;">
+            <h4 style="margin-bottom:8px;">Estimate Drivers &amp; Explanation</h4>
+            <div id="drivers-list" style="font-size:13px; line-height:1.7;"></div>
+            <div id="llm-narrative" style="margin-top:12px; padding:12px; background:rgba(241,245,249,0.7); border-radius:8px; font-size:13px; color:#475569; display:none;"></div>
+        </div>
+        <div class="card">
+            <h4 style="margin-bottom:12px;">What-If Simulator</h4>
+            <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(200px,1fr)); gap:10px; margin-bottom:12px;">
+                <label style="font-size:12px; font-weight:600;">Material +/-<br><input id="wi-material" type="range" min="-50" max="50" value="0" oninput="updateWi()"><span id="wi-material-val">0%</span></label>
+                <label style="font-size:12px; font-weight:600;">Labour +/-<br><input id="wi-labour" type="range" min="-50" max="50" value="0" oninput="updateWi()"><span id="wi-labour-val">0%</span></label>
+                <label style="font-size:12px; font-weight:600;">Overhead +/-<br><input id="wi-overhead" type="range" min="-50" max="50" value="0" oninput="updateWi()"><span id="wi-overhead-val">0%</span></label>
+                <label style="font-size:12px; font-weight:600;">Contingency %<br><input id="wi-contingency" type="range" min="0" max="30" value="10" oninput="updateWi()"><span id="wi-contingency-val">10%</span></label>
+                <label style="font-size:12px; font-weight:600;">Margin %<br><input id="wi-margin" type="range" min="1" max="40" value="12" oninput="updateWi()"><span id="wi-margin-val">12%</span></label>
+                <label style="font-size:12px; font-weight:600;">Discount %<br><input id="wi-discount" type="range" min="0" max="30" value="0" oninput="updateWi()"><span id="wi-discount-val">0%</span></label>
+            </div>
+            <div id="wi-result" style="display:flex; gap:20px; flex-wrap:wrap; align-items:baseline;"></div>
+        </div>
+    </div>
+</div>
+
+<div id="panel-winloss" class="tab-panel" style="display:none;">
+    <div id="wl-stats" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(180px,1fr)); gap:12px; margin-bottom:20px;"></div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+        <div class="card"><h4 style="margin-bottom:8px;">Win Rate by Margin Band</h4><canvas id="wl-band-chart" height="250"></canvas></div>
+        <div class="card"><h4 style="margin-bottom:8px;">Win Rate by Sector</h4><canvas id="wl-sector-chart" height="250"></canvas></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+var _estData = null;
+var _breakdownChart = null;
+var _wlBandChart = null;
+var _wlSectorChart = null;
+
+function switchTab(name) {
+    document.querySelectorAll('.tab-panel').forEach(function(p) { p.style.display = 'none'; });
+    document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
+    document.getElementById('panel-' + name).style.display = '';
+    document.getElementById('tab-' + name).classList.add('active');
+    if (name === 'winloss') loadWinLoss();
+}
+
+function fmtAmt(n) {
+    if (n == null || isNaN(n)) return '\u2014';
+    return '\u20B9' + Number(n).toLocaleString('en-IN', {minimumFractionDigits: 0, maximumFractionDigits: 0});
+}
+
+function outcomeBadge(o) {
+    if (o === 'won') return '<span style="background:rgba(34,197,94,0.15); color:#16a34a; padding:2px 8px; border-radius:12px; font-size:12px; font-weight:600;">Won</span>';
+    return '<span style="background:rgba(239,68,68,0.15); color:#dc2626; padding:2px 8px; border-radius:12px; font-size:12px; font-weight:600;">Lost</span>';
+}
+
+function toggleAddForm() {
+    var f = document.getElementById('add-form');
+    f.style.display = f.style.display === 'none' ? '' : 'none';
+}
+
+function loadProjects() {
+    fetch('/api/costing/projects')
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            var projects = d.projects || [];
+            var total = d.total || projects.length;
+            var tbody = document.getElementById('projects-tbody');
+            if (!projects.length) {
+                tbody.innerHTML = '<tr><td colspan="10" style="padding:20px; text-align:center; color:#94a3b8;">No projects yet. Load demo data or add one.</td></tr>';
+                document.getElementById('history-stats').textContent = '';
+                return;
+            }
+            var html = '';
+            projects.forEach(function(p) {
+                var cost = p.total_cost || 0;
+                var quoted = p.quoted_value || p.final_value || 0;
+                var margin = p.margin_pct != null ? p.margin_pct.toFixed(1) + '%' : '\u2014';
+                html += '<tr style="border-bottom:1px solid rgba(226,232,240,0.5);">';
+                html += '<td style="padding:8px 10px; font-weight:600;">' + (p.project_name || '') + '</td>';
+                html += '<td>' + (p.sector || '') + '</td>';
+                html += '<td>' + (p.equipment_category || '') + '</td>';
+                html += '<td>' + (p.year || '') + '</td>';
+                html += '<td>' + (p.quantity || '') + '</td>';
+                html += '<td style="text-align:right;">' + fmtAmt(cost) + '</td>';
+                html += '<td style="text-align:right;">' + fmtAmt(quoted) + '</td>';
+                html += '<td style="text-align:right;">' + margin + '</td>';
+                html += '<td>' + outcomeBadge(p.outcome) + '</td>';
+                html += '<td><button class="btn btn-secondary" style="padding:4px 10px; font-size:11px;" onclick="deleteProject(\'' + p.id + '\')">Delete</button></td>';
+                html += '</tr>';
+            });
+            tbody.innerHTML = html;
+            document.getElementById('history-stats').textContent = total + ' projects loaded';
+        })
+        .catch(function(err) {
+            console.error('loadProjects error:', err);
+        });
+}
+
+function seedDemo() {
+    var btn = event.target;
+    btn.disabled = true;
+    btn.textContent = 'Seeding...';
+    fetch('/api/costing/projects/seed-demo', { method: 'POST' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            btn.disabled = false;
+            btn.textContent = 'Load Demo Data';
+            loadProjects();
+        })
+        .catch(function(err) {
+            btn.disabled = false;
+            btn.textContent = 'Load Demo Data';
+            console.error('seedDemo error:', err);
+        });
+}
+
+function uploadCSV(input) {
+    var file = input.files[0];
+    if (!file) return;
+    var fd = new FormData();
+    fd.append('file', file);
+    var btn = event.target.previousElementSibling;
+    fetch('/api/costing/projects/upload', { method: 'POST', body: fd })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            input.value = '';
+            loadProjects();
+        })
+        .catch(function(err) {
+            console.error('uploadCSV error:', err);
+            input.value = '';
+        });
+}
+
+function addProject(e) {
+    e.preventDefault();
+    var form = e.target;
+    var fd = new FormData(form);
+    fetch('/api/costing/projects', { method: 'POST', body: fd })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            form.reset();
+            toggleAddForm();
+            loadProjects();
+        })
+        .catch(function(err) {
+            console.error('addProject error:', err);
+        });
+}
+
+function deleteProject(id) {
+    if (!confirm('Delete this project?')) return;
+    fetch('/api/costing/projects/' + id, { method: 'DELETE' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) { loadProjects(); })
+        .catch(function(err) { console.error('deleteProject error:', err); });
+}
+
+function runEstimate() {
+    var rfqText = document.getElementById('est-rfq').value.trim();
+    var proposalId = document.getElementById('est-proposal-id').value.trim();
+    var btn = document.getElementById('est-btn');
+    var url, fd;
+
+    if (proposalId) {
+        url = '/api/costing/estimate/proposal/' + proposalId;
+        fd = new FormData();
+    } else if (rfqText) {
+        url = '/api/costing/estimate';
+        fd = new FormData();
+        fd.append('rfq_text', rfqText);
+    } else {
+        alert('Please enter RFQ text or a Proposal ID.');
+        return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Estimating...';
+
+    fetch(url, { method: 'POST', body: fd })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            btn.disabled = false;
+            btn.textContent = 'Run Estimate';
+            _estData = d;
+            showEstimateResults(d);
+        })
+        .catch(function(err) {
+            btn.disabled = false;
+            btn.textContent = 'Run Estimate';
+            console.error('runEstimate error:', err);
+        });
+}
+
+function showEstimateResults(d) {
+    document.getElementById('est-results').style.display = '';
+    var cur = d.currency || 'INR';
+    var cardsHtml = '';
+    cardsHtml += '<div class="card"><div style="font-size:12px; color:#64748b; margin-bottom:4px;">Predicted Cost</div><div style="font-size:22px; font-weight:700;">' + fmtAmt(d.predicted_cost) + '</div></div>';
+    cardsHtml += '<div class="card"><div style="font-size:12px; color:#64748b; margin-bottom:4px;">Unit Cost</div><div style="font-size:22px; font-weight:700;">' + fmtAmt(d.predicted_unit_cost) + '</div></div>';
+    if (d.risk) {
+        var riskColor = d.risk.risk_level === 'high' ? '#dc2626' : d.risk.risk_level === 'medium' ? '#f59e0b' : '#16a34a';
+        cardsHtml += '<div class="card"><div style="font-size:12px; color:#64748b; margin-bottom:4px;">Risk Level</div><div style="font-size:22px; font-weight:700; color:' + riskColor + ';">' + (d.risk.risk_level || '').toUpperCase() + '</div><div style="font-size:11px; color:#94a3b8;">Contingency: ' + (d.risk.contingency_pct || 0) + '%</div></div>';
+    }
+    if (d.margin) {
+        cardsHtml += '<div class="card"><div style="font-size:12px; color:#64748b; margin-bottom:4px;">Recommended Margin</div><div style="font-size:22px; font-weight:700;">' + (d.margin.recommended_margin_pct || 0) + '%</div><div style="font-size:11px; color:#94a3b8;">Range: ' + (d.margin.margin_floor_pct || 0) + '% - ' + (d.margin.margin_ceiling_pct || 0) + '%</div></div>';
+    }
+    if (d.price) {
+        cardsHtml += '<div class="card"><div style="font-size:12px; color:#64748b; margin-bottom:4px;">Recommended Price</div><div style="font-size:22px; font-weight:700;">' + fmtAmt(d.price.price_net) + '</div><div style="font-size:11px; color:#94a3b8;">Range: ' + fmtAmt(d.price.price_min) + ' - ' + fmtAmt(d.price.price_max) + '</div></div>';
+    }
+    cardsHtml += '<div class="card"><div style="font-size:12px; color:#64748b; margin-bottom:4px;">Confidence</div><div style="font-size:22px; font-weight:700;">' + Math.round((d.confidence || 0) * 100) + '%</div></div>';
+    document.getElementById('est-cards').innerHTML = cardsHtml;
+
+    // Breakdown chart
+    if (d.breakdown) {
+        var labels = Object.keys(d.breakdown);
+        var values = labels.map(function(k) { return d.breakdown[k]; });
+        var colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6'];
+        var ctx = document.getElementById('breakdown-chart').getContext('2d');
+        if (_breakdownChart) _breakdownChart.destroy();
+        _breakdownChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: labels,
+                datasets: [{ data: values, backgroundColor: colors.slice(0, labels.length), borderWidth: 0 }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { position: 'right', labels: { font: { size: 11 }, padding: 8 } },
+                    tooltip: {
+                        callbacks: {
+                            label: function(ctx) {
+                                var pct = d.breakdown_pct ? d.breakdown_pct[ctx.label] : 0;
+                                return ctx.label + ': ' + fmtAmt(ctx.raw) + ' (' + (pct || 0).toFixed(1) + '%)';
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // Similar projects
+    var simHtml = '';
+    if (d.similar_projects && d.similar_projects.length) {
+        d.similar_projects.forEach(function(s) {
+            simHtml += '<div style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid rgba(226,232,240,0.5); font-size:13px;">';
+            simHtml += '<div><div style="font-weight:600;">' + (s.project_name || '') + '</div>';
+            simHtml += '<div style="color:#94a3b8; font-size:11px;">' + (s.equipment_category || '') + ' | ' + (s.sector || '') + '</div></div>';
+            simHtml += '<div style="text-align:right;"><div style="font-weight:600;">' + fmtAmt(s.total_cost) + '</div>';
+            simHtml += '<div style="color:#94a3b8; font-size:11px;">Similarity: ' + Math.round((s.similarity_score || 0) * 100) + '%</div></div>';
+            simHtml += '</div>';
+        });
+    } else {
+        simHtml = '<div style="color:#94a3b8; font-size:13px;">No similar projects found.</div>';
+    }
+    document.getElementById('similar-list').innerHTML = simHtml;
+
+    // Drivers
+    var driversHtml = '';
+    if (d.drivers && d.drivers.length) {
+        d.drivers.forEach(function(dr) {
+            driversHtml += '<div style="padding:4px 0; border-bottom:1px solid rgba(226,232,240,0.3);">&#8226; ' + dr + '</div>';
+        });
+    }
+    document.getElementById('drivers-list').innerHTML = driversHtml;
+
+    // LLM Narrative
+    var narrDiv = document.getElementById('llm-narrative');
+    if (d.llm_narrative) {
+        narrDiv.style.display = '';
+        narrDiv.innerHTML = d.llm_narrative;
+    } else {
+        narrDiv.style.display = 'none';
+        narrDiv.innerHTML = '';
+    }
+
+    // Update what-if sliders display
+    updateWi();
+}
+
+function updateWi() {
+    if (!_estData) return;
+    var matPct = parseInt(document.getElementById('wi-material').value);
+    var labPct = parseInt(document.getElementById('wi-labour').value);
+    var ohPct = parseInt(document.getElementById('wi-overhead').value);
+    var contPct = parseInt(document.getElementById('wi-contingency').value);
+    var marginPct = parseInt(document.getElementById('wi-margin').value);
+    var discountPct = parseInt(document.getElementById('wi-discount').value);
+
+    document.getElementById('wi-material-val').textContent = (matPct >= 0 ? '+' : '') + matPct + '%';
+    document.getElementById('wi-labour-val').textContent = (labPct >= 0 ? '+' : '') + labPct + '%';
+    document.getElementById('wi-overhead-val').textContent = (ohPct >= 0 ? '+' : '') + ohPct + '%';
+    document.getElementById('wi-contingency-val').textContent = contPct + '%';
+    document.getElementById('wi-margin-val').textContent = marginPct + '%';
+    document.getElementById('wi-discount-val').textContent = discountPct + '%';
+
+    var bd = _estData.breakdown || {};
+    var mat = (bd.material_cost || bd.Material || 0) * (1 + matPct / 100);
+    var lab = (bd.labour_cost || bd.Labour || bd.labor_cost || 0) * (1 + labPct / 100);
+    var oh = (bd.overhead_cost || bd.Overhead || 0) * (1 + ohPct / 100);
+    var eng = bd.engineering_cost || bd.Engineering || 0;
+    var frt = bd.freight_cost || bd.Freight || 0;
+    var baseCost = mat + lab + oh + eng + frt;
+    var contingencyAmt = baseCost * (contPct / 100);
+    var costWithContingency = baseCost + contingencyAmt;
+    var priceBeforeDiscount = costWithContingency / (1 - marginPct / 100);
+    var finalPrice = priceBeforeDiscount * (1 - discountPct / 100);
+
+    var resHtml = '';
+    resHtml += '<div><div style="font-size:12px; color:#64748b;">Adj. Cost</div><div style="font-size:20px; font-weight:700;">' + fmtAmt(baseCost) + '</div></div>';
+    resHtml += '<div><div style="font-size:12px; color:#64748b;">+ Contingency</div><div style="font-size:20px; font-weight:700;">' + fmtAmt(contingencyAmt) + '</div></div>';
+    resHtml += '<div><div style="font-size:12px; color:#64748b;">Total Cost</div><div style="font-size:20px; font-weight:700;">' + fmtAmt(costWithContingency) + '</div></div>';
+    resHtml += '<div><div style="font-size:12px; color:#64748b;">Price (before discount)</div><div style="font-size:20px; font-weight:700;">' + fmtAmt(priceBeforeDiscount) + '</div></div>';
+    resHtml += '<div><div style="font-size:12px; color:#64748b;">Final Price</div><div style="font-size:20px; font-weight:700; color:#3b82f6;">' + fmtAmt(finalPrice) + '</div></div>';
+    resHtml += '<div><div style="font-size:12px; color:#64748b;">Effective Margin</div><div style="font-size:20px; font-weight:700;">' + marginPct + '%</div></div>';
+
+    document.getElementById('wi-result').innerHTML = resHtml;
+}
+
+function loadWinLoss() {
+    fetch('/api/costing/win-loss')
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            var o = d.overall || {};
+            var statsHtml = '';
+            statsHtml += '<div class="card"><div style="font-size:12px; color:#64748b;">Total Projects</div><div style="font-size:22px; font-weight:700;">' + (o.total || 0) + '</div></div>';
+            statsHtml += '<div class="card"><div style="font-size:12px; color:#64748b;">Won</div><div style="font-size:22px; font-weight:700; color:#16a34a;">' + (o.won || 0) + '</div></div>';
+            statsHtml += '<div class="card"><div style="font-size:12px; color:#64748b;">Lost</div><div style="font-size:22px; font-weight:700; color:#dc2626;">' + (o.lost || 0) + '</div></div>';
+            statsHtml += '<div class="card"><div style="font-size:12px; color:#64748b;">Win Rate</div><div style="font-size:22px; font-weight:700;">' + ((o.win_rate || 0) * 100).toFixed(1) + '%</div></div>';
+            statsHtml += '<div class="card"><div style="font-size:12px; color:#64748b;">Won Value</div><div style="font-size:22px; font-weight:700;">' + fmtAmt(o.won_value) + '</div></div>';
+            statsHtml += '<div class="card"><div style="font-size:12px; color:#64748b;">Lost Value</div><div style="font-size:22px; font-weight:700;">' + fmtAmt(o.lost_value) + '</div></div>';
+            statsHtml += '<div class="card"><div style="font-size:12px; color:#64748b;">Avg Margin (Won)</div><div style="font-size:22px; font-weight:700;">' + (d.avg_margin_won != null ? d.avg_margin_won.toFixed(1) + '%' : '\u2014') + '</div></div>';
+            statsHtml += '<div class="card"><div style="font-size:12px; color:#64748b;">Avg Margin (Lost)</div><div style="font-size:22px; font-weight:700;">' + (d.avg_margin_lost != null ? d.avg_margin_lost.toFixed(1) + '%' : '\u2014') + '</div></div>';
+            if (d.lost_on_price_ratio != null) {
+                statsHtml += '<div class="card"><div style="font-size:12px; color:#64748b;">Lost on Price</div><div style="font-size:22px; font-weight:700;">' + (d.lost_on_price_ratio * 100).toFixed(0) + '%</div></div>';
+            }
+            document.getElementById('wl-stats').innerHTML = statsHtml;
+
+            // Win rate by margin band chart
+            if (d.by_margin_band) {
+                var bandLabels = Object.keys(d.by_margin_band);
+                var bandValues = bandLabels.map(function(k) {
+                    var v = d.by_margin_band[k];
+                    return (v.win_rate != null ? v.win_rate : (v.won || 0) / Math.max(1, (v.total || 1))) * 100;
+                });
+                var bandCounts = bandLabels.map(function(k) {
+                    var v = d.by_margin_band[k];
+                    return v.total || 0;
+                });
+                var ctx1 = document.getElementById('wl-band-chart').getContext('2d');
+                if (_wlBandChart) _wlBandChart.destroy();
+                _wlBandChart = new Chart(ctx1, {
+                    type: 'bar',
+                    data: {
+                        labels: bandLabels,
+                        datasets: [{
+                            label: 'Win Rate %',
+                            data: bandValues,
+                            backgroundColor: 'rgba(59,130,246,0.6)',
+                            borderColor: 'rgba(59,130,246,1)',
+                            borderWidth: 1,
+                            borderRadius: 4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            y: { beginAtZero: true, max: 100, ticks: { callback: function(v) { return v + '%'; } } }
+                        },
+                        tooltips: {
+                            callbacks: {
+                                afterLabel: function(ctx) { return 'Projects: ' + bandCounts[ctx.dataIndex]; }
+                            }
+                        }
+                    }
+                });
+            }
+
+            // Win rate by sector chart
+            if (d.by_sector) {
+                var secLabels = Object.keys(d.by_sector);
+                var secValues = secLabels.map(function(k) {
+                    var v = d.by_sector[k];
+                    return (v.win_rate != null ? v.win_rate : (v.won || 0) / Math.max(1, (v.total || 1))) * 100;
+                });
+                var secCounts = secLabels.map(function(k) {
+                    var v = d.by_sector[k];
+                    return v.total || 0;
+                });
+                var ctx2 = document.getElementById('wl-sector-chart').getContext('2d');
+                if (_wlSectorChart) _wlSectorChart.destroy();
+                _wlSectorChart = new Chart(ctx2, {
+                    type: 'bar',
+                    data: {
+                        labels: secLabels,
+                        datasets: [{
+                            label: 'Win Rate %',
+                            data: secValues,
+                            backgroundColor: 'rgba(16,185,129,0.6)',
+                            borderColor: 'rgba(16,185,129,1)',
+                            borderWidth: 1,
+                            borderRadius: 4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            y: { beginAtZero: true, max: 100, ticks: { callback: function(v) { return v + '%'; } } }
+                        },
+                        tooltips: {
+                            callbacks: {
+                                afterLabel: function(ctx) { return 'Projects: ' + secCounts[ctx.dataIndex]; }
+                            }
+                        }
+                    }
+                });
+            }
+        })
+        .catch(function(err) {
+            console.error('loadWinLoss error:', err);
+        });
+}
+
+window.onload = function() {
+    loadProjects();
+};
+</script>
+{% endblock %}

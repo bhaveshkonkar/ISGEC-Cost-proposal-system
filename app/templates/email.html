@@ -1,0 +1,561 @@
+{% extends "base.html" %}
+{% block title %}Email Approvals & Automation - ISGEC{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div class="page-header-title">
+        <h1>Email Quotation Approvals</h1>
+        <p>Inbound email RFQs and automated quotation generation</p>
+    </div>
+    <div class="flex gap-3 items-center">
+        <span id="config-status" class="badge" style="background:rgba(226,232,240,0.8); color:#475569; padding:6px 12px; font-size:12px;"></span>
+        <button class="btn btn-primary" onclick="checkNow()" id="check-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            Check Inbox Now
+        </button>
+    </div>
+</div>
+
+<div class="card">
+    <div class="flex gap-3 mb-4" style="border-bottom: 1px solid rgba(226,232,240,0.8); padding-bottom: 16px;">
+        <a href="/email-automation?tab=pending" class="btn {% if active_tab == 'pending' %}btn-primary{% else %}btn-secondary{% endif %}" id="tab-pending">
+            Pending Approval <span class="badge badge-draft" id="count-pending" style="margin-left:6px;">0</span>
+        </a>
+        <a href="/email-automation?tab=sent" class="btn {% if active_tab == 'sent' %}btn-primary{% else %}btn-secondary{% endif %}">
+            Sent Quotes <span class="badge badge-sent" id="count-sent" style="margin-left:6px;">0</span>
+        </a>
+        <a href="/email-automation?tab=issues" class="btn {% if active_tab == 'issues' %}btn-danger{% else %}btn-secondary{% endif %}">
+            Issues / Exceptions <span class="badge badge-rejected" id="count-issues" style="margin-left:6px;">0</span>
+        </a>
+    </div>
+
+    <div id="alert-box" style="display:none; padding:12px 18px; border-radius:10px; margin-bottom:18px; font-size:13.5px; font-weight:600;"></div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>From</th>
+                <th>Subject</th>
+                <th>Status</th>
+                <th>Quote Total</th>
+                <th>Received Date</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="emails-table">
+            <tr><td colspan="6" class="text-muted" style="text-align:center;padding:40px;">Loading emails...</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<div class="card" id="detail-card" style="display:none; border:2px solid var(--primary-gold);">
+    <h3>
+        <span class="flex items-center gap-2">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            Review Quotation &mdash; <span id="detail-subject"></span>
+        </span>
+    </h3>
+    <p class="text-sm text-muted mb-4" id="detail-meta"></p>
+    
+    <table>
+        <thead>
+            <tr>
+                <th>SKU</th>
+                <th>Description</th>
+                <th class="text-right">Qty</th>
+                <th class="text-right">Unit Price (Net)</th>
+                <th class="text-right">Subtotal (Net)</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody id="detail-items"></tbody>
+    </table>
+
+    <!-- Cost Intelligence Panel -->
+    <div id="email-ci-panel" style="margin-top:18px; border:1px solid rgba(139,92,246,0.2); background:rgba(245,243,255,0.3); border-radius:14px; padding:18px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <h4 style="margin:0; color:#7c3aed;">Cost Intelligence</h4>
+            <button class="btn btn-primary" style="background:#7c3aed; border:none;" onclick="runEstimate()" id="email-est-btn">Run Cost Analysis</button>
+        </div>
+        <div id="email-est-loading" style="display:none; font-size:13px; color:#64748b; padding:16px;">Analyzing...</div>
+        <div id="email-est-placeholder" style="font-size:13px; color:#64748b;">Click to predict internal cost, recommended quote price, margin, and risk before approving.</div>
+        <div id="email-est-compare" style="display:none; background:white; border-radius:10px; padding:10px 14px; margin-bottom:10px; font-size:13px; display:flex; gap:16px; align-items:center;"></div>
+        <div id="email-est-results" style="display:none;"></div>
+
+        <!-- Price Slider + Approve Section -->
+        <div id="email-price-section" style="display:none; margin-top:14px; background:white; border-radius:12px; padding:16px; border:1px solid rgba(139,92,246,0.15);">
+            <div style="font-size:13px; font-weight:700; color:#0f172a; margin-bottom:10px;">Set Quote Price</div>
+            <div style="display:flex; gap:14px; align-items:center; margin-bottom:10px;">
+                <span id="price-min-label" style="font-size:11px; color:#64748b; white-space:nowrap;"></span>
+                <input type="range" id="email-price-slider" min="0" max="100" value="50" style="flex:1; accent-color:#7c3aed;" oninput="onPriceSlider()">
+                <span id="price-max-label" style="font-size:11px; color:#64748b; white-space:nowrap;"></span>
+            </div>
+            <div style="display:flex; gap:20px; align-items:baseline; margin-bottom:10px;">
+                <div><span style="font-size:11px; color:#64748b;">SELECTED PRICE</span><div id="price-selected" style="font-size:22px; font-weight:800; color:#7c3aed;">-</div></div>
+                <div><span style="font-size:11px; color:#64748b;">MARGIN</span><div id="price-margin" style="font-size:16px; font-weight:700; color:#059669;">-</div></div>
+                <div style="flex:1;"></div>
+                <button class="btn btn-primary" id="email-approve-send-btn" style="background:#7c3aed; border:none; font-size:13px; padding:10px 22px;" onclick="approveWithPrice()">Approve &amp; Send Quote</button>
+            </div>
+            <div id="email-price-breakdown" style="display:grid; grid-template-columns:repeat(5,1fr); gap:6px; margin-top:8px;"></div>
+        </div>
+    </div>
+
+    <div class="flex gap-3 mt-4 justify-between items-center" style="background:rgba(248, 250, 252, 0.8); padding:16px; border-radius:12px;">
+        <div id="detail-total" class="font-mono text-sm font-bold" style="color:#0f172a;"></div>
+        <div class="flex gap-2">
+            <button class="btn btn-primary" onclick="approveCurrent()">Approve &amp; Send Email</button>
+            <button class="btn btn-danger" onclick="rejectCurrent()">Reject Quote</button>
+            <button class="btn btn-secondary" onclick="closeDetail()">Close</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const TAB = '{{ active_tab }}';
+let currentEmailId = null;
+
+function showAlert(msg, isError) {
+    const box = document.getElementById('alert-box');
+    box.style.display = 'block';
+    box.style.background = isError ? 'rgba(239,68,68,0.15)' : 'rgba(16,185,129,0.15)';
+    box.style.color = isError ? '#991b1b' : '#065f46';
+    box.style.border = isError ? '1px solid rgba(239,68,68,0.3)' : '1px solid rgba(16,185,129,0.3)';
+    box.textContent = msg;
+    setTimeout(() => { box.style.display = 'none'; }, 6000);
+}
+
+const statusBadges = {
+    quoted: '<span class="badge badge-draft">Pending Approval</span>',
+    replied: '<span class="badge badge-sent">Replied / Sent</span>',
+    failed: '<span class="badge badge-rejected">Failed</span>',
+    needs_review: '<span class="badge badge-draft">Needs Review</span>',
+    rejected: '<span class="badge badge-rejected">Rejected</span>',
+    processing: '<span class="badge badge-draft">Processing</span>',
+};
+
+const itemBadges = {
+    quoted: '<span class="badge badge-accepted">Quoted</span>',
+    on_request: '<span class="badge badge-draft">On Request</span>',
+    not_offered: '<span class="badge badge-rejected">Not Offered</span>',
+};
+
+async function loadCounts() {
+    try {
+        const res = await fetch('/api/emails?tab=pending');
+        const data = await res.json();
+        const c = data.counts || {};
+        document.getElementById('count-pending').textContent =
+            (c.quoted || 0) + (c.needs_review || 0) + (c.processing || 0) + (c.new || 0);
+        document.getElementById('count-sent').textContent = c.replied || 0;
+        document.getElementById('count-issues').textContent = (c.failed || 0) + (c.rejected || 0);
+        document.getElementById('config-status').textContent = data.configured
+            ? '✓ Mailbox Active' : '⚠ Mailbox Offline';
+    } catch(e) {}
+}
+
+async function loadEmails() {
+    const res = await fetch(`/api/emails?tab=${TAB}`);
+    const data = await res.json();
+    const tbody = document.getElementById('emails-table');
+    if (!data.emails || data.emails.length === 0) {
+        const emptyMsg = {
+            pending: 'No quotations waiting for approval.',
+            sent: 'No quotes sent yet.',
+            issues: 'No issues. All emails processed cleanly.'
+        };
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:48px 16px;" class="text-muted"><p style="font-weight:600;">${emptyMsg[TAB]}</p></td></tr>`;
+        return;
+    }
+    tbody.innerHTML = data.emails.map(e => `
+        <tr>
+            <td style="font-weight:600; color:#0f172a;">${escapeHtml(e.from_addr)}</td>
+            <td>${subjectCell(e)}</td>
+            <td>${statusBadges[e.status] || e.status}</td>
+            <td class="font-mono font-bold">${e.proposal ? `${e.proposal.currency} ${Number(e.proposal.total_net).toLocaleString('en-IN')}` : '-'}</td>
+            <td class="text-sm">${e.received_at ? new Date(e.received_at).toLocaleString() : '-'}</td>
+            <td><div class="flex gap-2">${actionButtons(e)}</div></td>
+        </tr>
+    `).join('');
+}
+
+const replyBadges = {
+    acceptance: '<span class="badge badge-accepted">&#10003; Customer Accepted</span>',
+    rejection: '<span class="badge badge-rejected">&#10007; Customer Rejected</span>',
+};
+
+function subjectCell(e) {
+    let html = escapeHtml(e.subject);
+    if (e.attachment_names.length) {
+        html += ` <small class="text-muted">(${e.attachment_names.length} attachment${e.attachment_names.length > 1 ? 's' : ''})</small>`;
+    }
+    if (replyBadges[e.email_type]) {
+        html += `<br>${replyBadges[e.email_type]}`;
+        if (e.triage_note) html += `<br><small class="text-muted">${escapeHtml(e.triage_note)}</small>`;
+    }
+    return html;
+}
+
+function actionButtons(e) {
+    if (e.status === 'quoted') {
+        return `<button class="btn btn-primary btn-sm" onclick="showDetail(${e.id})">Review Quote</button>
+                <button class="btn btn-secondary btn-sm" style="background:#f5f3ff; border:1px solid #ddd6fe; color:#7c3aed;" onclick="emailCostCheck(${e.id})">Cost Check</button>
+                ${e.proposal_id ? `<a href="/proposal/${e.proposal_id}" class="btn btn-secondary btn-sm">Proposal</a>` : ''}`;
+    }
+    if (e.status === 'replied') {
+        const btns = [`<span class="text-xs text-muted">${e.sent_by === 'auto' ? 'Auto-sent' : 'Admin Approved'}</span>`];
+        if (e.proposal_id) {
+            btns.push(`<a href="/proposal/${e.proposal_id}" class="btn btn-secondary btn-sm">Proposal</a>`);
+        }
+        return btns.join(' ');
+    }
+    if (e.status === 'failed' || e.status === 'needs_review') {
+        return `<button class="btn btn-secondary btn-sm" onclick="retryEmail(${e.id})">Retry</button>
+                <button class="btn btn-danger btn-sm" onclick="showError('${e.id}')">Error</button>`;
+    }
+    if (e.status === 'rejected') {
+        return `<span class="text-xs text-muted">No action</span>`;
+    }
+    return '';
+}
+
+async function showDetail(id) {
+    const res = await fetch(`/api/emails?tab=pending`);
+    const data = await res.json();
+    const e = data.emails.find(x => x.id === id);
+    if (!e) return;
+    currentEmailId = id;
+    document.getElementById('detail-card').style.display = 'block';
+    document.getElementById('detail-subject').textContent = e.subject;
+    document.getElementById('detail-meta').textContent =
+        `From: ${e.from_addr}  |  Received: ${e.received_at ? new Date(e.received_at).toLocaleString() : '-'}  |  ${e.error_message || ''}`;
+    document.getElementById('detail-items').innerHTML = e.items.map(it => `
+        <tr>
+            <td class="font-mono font-bold">${it.sku || '-'}</td>
+            <td>${escapeHtml(it.description)}${it.notes ? `<br><small class="text-muted">${escapeHtml(it.notes)}</small>` : ''}</td>
+            <td class="text-right font-mono">${it.quantity}</td>
+            <td class="text-right font-mono">${it.item_status === 'quoted' ? it.currency + ' ' + Number(it.unit_price_net).toLocaleString('en-IN') : '—'}</td>
+            <td class="text-right font-mono font-bold">${it.item_status === 'quoted' ? it.currency + ' ' + Number(it.subtotal_net).toLocaleString('en-IN') : 'price on request'}</td>
+            <td>${itemBadges[it.item_status] || it.item_status}</td>
+        </tr>
+    `).join('');
+    const quotedTotal = e.items.filter(i => i.item_status === 'quoted')
+        .reduce((s, i) => s + i.subtotal_net, 0);
+    document.getElementById('detail-total').textContent =
+        `Quoted Net Total: ${e.items.length && e.items[0].currency ? e.items[0].currency : 'INR'} ${quotedTotal.toLocaleString('en-IN')}`;
+
+    // Cost Intelligence: reset panel and load saved estimate if available
+    document.getElementById('email-est-placeholder').style.display = 'block';
+    document.getElementById('email-est-results').style.display = 'none';
+    document.getElementById('email-est-loading').style.display = 'none';
+    document.getElementById('email-est-compare').style.display = 'none';
+    document.getElementById('email-est-btn').disabled = false;
+    document.getElementById('email-est-btn').textContent = 'Run Cost Analysis';
+    document.getElementById('email-price-section').style.display = 'none';
+    emailEstimateProposalId = e.proposal_id || null;
+    emailEstimateData = null;
+    emailPriceData = null;
+    if (e.proposal_id) {
+        loadSavedEstimate(e.proposal_id);
+    } else {
+        document.getElementById('email-est-placeholder').textContent = 'No linked proposal — cost analysis not available for this email.';
+        document.getElementById('email-est-btn').disabled = true;
+    }
+
+    document.getElementById('detail-card').scrollIntoView({behavior: 'smooth'});
+}
+
+function closeDetail() {
+    document.getElementById('detail-card').style.display = 'none';
+    currentEmailId = null;
+    emailEstimateProposalId = null;
+    emailEstimateData = null;
+    emailPriceData = null;
+}
+
+async function approveCurrent() {
+    if (!currentEmailId) return;
+    if (!confirm('Send this quotation to the customer?')) return;
+    try {
+        const res = await fetch(`/api/emails/${currentEmailId}/approve`, {method: 'POST'});
+        const data = await safeJson(res);
+        if (res.ok) {
+            showAlert(`Quote sent successfully (${data.sent_by}).`, false);
+            closeDetail();
+        } else if (res.status === 409 && confirm(data.detail + '\n\nOK to provide an approval justification and force the send.')) {
+            const reason = prompt('Approval justification (required):');
+            if (!reason || !reason.trim()) { showAlert('Override cancelled — justification is required.', true); refresh(); return; }
+            const form = new FormData();
+            form.append('justification', reason.trim());
+            form.append('force', 'true');
+            const res2 = await fetch(`/api/emails/${currentEmailId}/approve`, {method: 'POST', body: form});
+            const data2 = await safeJson(res2);
+            if (res2.ok) showAlert('Quote sent with policy override (recorded in audit history).', false), closeDetail();
+            else showAlert(data2.detail || 'Failed to send quote.', true);
+        } else {
+            showAlert(data.detail || 'Failed to send quote.', true);
+        }
+    } catch (err) {
+        showAlert('Approve failed: ' + err.message, true);
+    }
+    refresh();
+}
+
+async function rejectCurrent() {
+    if (!currentEmailId) return;
+    if (!confirm('Reject this quotation? No email will be sent to the customer.')) return;
+    try {
+        const res = await fetch(`/api/emails/${currentEmailId}/reject`, {method: 'POST'});
+        const data = await safeJson(res);
+        if (res.ok) {
+            showAlert('Quotation rejected.', false);
+            closeDetail();
+        } else {
+            showAlert(data.detail || 'Failed to reject.', true);
+        }
+    } catch (err) {
+        showAlert('Reject failed: ' + err.message, true);
+    }
+    refresh();
+}
+
+async function retryEmail(id) {
+    try {
+        const res = await fetch(`/api/emails/${id}/retry`, {method: 'POST'});
+        const data = await safeJson(res);
+        if (res.ok) showAlert(`Reprocessed — status: ${data.status}`, data.status === 'failed');
+        else showAlert(data.detail || 'Retry failed.', true);
+    } catch (err) {
+        showAlert('Retry failed: ' + err.message, true);
+    }
+    refresh();
+}
+
+async function showError(id) {
+    const res = await fetch(`/api/emails?tab=issues`);
+    const data = await res.json();
+    const e = data.emails.find(x => x.id === parseInt(id));
+    alert(e ? (e.error_message || 'No error details.') : 'Not found.');
+}
+
+async function checkNow() {
+    const btn = document.getElementById('check-btn');
+    btn.disabled = true;
+    btn.innerHTML = 'Checking Inbox...';
+    try {
+        const res = await fetch('/api/emails/check-now', {method: 'POST'});
+        const data = await safeJson(res);
+        if (res.ok) {
+            const failureText = data.failed ? `, ${data.failed} failed` : '';
+            showAlert(`Inbox checked: ${data.checked} new email(s), ${data.processed} processed, ${data.skipped} duplicates skipped${failureText}.`, Boolean(data.failed));
+        }
+        else showAlert(data.detail || 'Check failed.', true);
+    } catch (err) {
+        showAlert('Check failed: ' + err.message, true);
+    }
+    btn.disabled = false;
+    btn.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+        Check Inbox Now
+    `;
+    refresh();
+}
+
+function refresh() { loadCounts(); loadEmails(); }
+
+function escapeHtml(s) {
+    return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+let emailEstimateData = null;
+let emailEstimateProposalId = null;
+let emailPriceData = null;
+
+function ciFmt(n) {
+    return Number(n).toLocaleString('en-IN', {minimumFractionDigits: 0, maximumFractionDigits: 0});
+}
+
+function displayEstimate(d, proposalId) {
+    emailEstimateData = d;
+    emailEstimateProposalId = proposalId;
+    document.getElementById('email-est-loading').style.display = 'none';
+    document.getElementById('email-est-placeholder').style.display = 'none';
+    document.getElementById('email-est-results').style.display = 'block';
+    const riskColor = d.risk.risk_level === 'low' ? '#059669' : d.risk.risk_level === 'high' ? '#ef4444' : '#d97706';
+    document.getElementById('email-est-results').innerHTML = `
+        <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(155px,1fr)); gap:10px; margin-bottom:10px;">
+            <div style="background:#f8fafc; border-radius:10px; padding:12px;"><div style="font-size:10px; color:#64748b; font-weight:600;">PREDICTED COST</div><div style="font-size:17px; font-weight:800;">INR ${ciFmt(d.predicted_cost)}</div></div>
+            <div style="background:#ecfdf5; border-radius:10px; padding:12px;"><div style="font-size:10px; color:#64748b; font-weight:600;">RECOMMENDED QUOTE</div><div style="font-size:17px; font-weight:800; color:#059669;">INR ${ciFmt(d.price.price_net)}</div></div>
+            <div style="background:#f5f3ff; border-radius:10px; padding:12px;"><div style="font-size:10px; color:#64748b; font-weight:600;">MARGIN</div><div style="font-size:17px; font-weight:800; color:#7c3aed;">${d.margin.recommended_margin_pct.toFixed(1)}%</div></div>
+            <div style="background:${riskColor}15; border-radius:10px; padding:12px;"><div style="font-size:10px; color:#64748b; font-weight:600;">RISK</div><div style="font-size:17px; font-weight:800; color:${riskColor};">${d.risk.risk_level.toUpperCase()}</div></div>
+            <div style="background:#fffbeb; border-radius:10px; padding:12px;"><div style="font-size:10px; color:#64748b; font-weight:600;">CONTINGENCY</div><div style="font-size:17px; font-weight:800; color:#92400e;">${d.risk.contingency_pct}%</div></div>
+            <div style="background:#f0f9ff; border-radius:10px; padding:12px;"><div style="font-size:10px; color:#64748b; font-weight:600;">CONFIDENCE</div><div style="font-size:17px; font-weight:800; color:#0369a1;">${(d.confidence*100).toFixed(0)}%</div></div>
+        </div>
+        <div style="font-size:12px; color:#64748b; margin-bottom:6px;"><b>Drivers:</b> ${d.drivers.join(' &bull; ')}</div>
+        ${d.llm_narrative ? `<div style="font-size:12px; color:#475569; padding:10px; background:rgba(241,245,249,0.7); border-radius:8px; line-height:1.6; margin-bottom:6px;">${escapeHtml(d.llm_narrative)}</div>` : ''}
+    `;
+    const el = document.getElementById('email-est-compare');
+    el.style.display = 'flex';
+    el.innerHTML = `<b style="color:#0f172a;">Catalog Quote:</b> INR ${ciFmt(d.predicted_cost)}
+        <span style="color:#64748b;">vs</span>
+        <b style="color:#059669;">Recommended:</b> INR ${ciFmt(d.price.price_net)}
+        <span style="font-size:11px; font-weight:700; padding:2px 8px; border-radius:6px;
+            background:${d.price.price_net > d.predicted_cost * 1.2 ? '#dcfce7' : '#fef2f2'};
+            color:${d.price.price_net > d.predicted_cost * 1.2 ? '#065f46' : '#991b1b'};">
+            ${d.price.price_net > d.predicted_cost * 1.2 ? '&#10003; Healthy margin' : '&#9888; Margin thin — review pricing'}
+        </span>
+        <a href="/costing" target="_blank" style="font-size:12px; color:#7c3aed; font-weight:600; margin-left:auto;">Full view &rarr;</a>`;
+
+    // Show price slider section
+    const priceSection = document.getElementById('email-price-section');
+    priceSection.style.display = 'block';
+    const minPrice = d.predicted_cost;
+    const maxPrice = d.price.price_net * 1.15;
+    emailPriceData = {
+        min: minPrice,
+        max: maxPrice,
+        predicted: d.predicted_cost,
+        recommended: d.price.price_net,
+        cost: d.predicted_cost,
+        breakdown: d.breakdown || {},
+    };
+    document.getElementById('price-min-label').textContent = 'INR ' + ciFmt(minPrice) + ' (cost)';
+    document.getElementById('price-max-label').textContent = 'INR ' + ciFmt(maxPrice) + ' (15% over)';
+    const slider = document.getElementById('email-price-slider');
+    slider.min = 0;
+    slider.max = 1000;
+    slider.value = 750;
+    onPriceSlider();
+}
+
+async function loadSavedEstimate(proposalId) {
+    if (!proposalId) return;
+    try {
+        const res = await fetch(`/api/costing/estimates/${proposalId}`);
+        if (res.ok) {
+            const d = await res.json();
+            if (d && d.predicted_cost > 0) {
+                displayEstimate(d, proposalId);
+                document.getElementById('email-est-btn').textContent = 'Refresh Analysis';
+                return;
+            }
+        }
+    } catch (e) {}
+}
+
+async function runEstimate() {
+    if (!emailEstimateProposalId && !currentEmailId) return;
+    const proposalId = emailEstimateProposalId || currentEmailId;
+    const btn = document.getElementById('email-est-btn');
+    btn.disabled = true;
+    btn.textContent = 'Analyzing...';
+    document.getElementById('email-est-loading').style.display = 'block';
+    document.getElementById('email-est-results').style.display = 'none';
+    try {
+        const res = await fetch(`/api/costing/estimate/proposal/${proposalId}`, {method: 'POST'});
+        const d = await res.json();
+        btn.disabled = false;
+        btn.textContent = 'Refresh Analysis';
+        if (d.error) { document.getElementById('email-est-loading').textContent = 'Error: ' + d.error; return; }
+        displayEstimate(d, proposalId);
+    } catch (e) {
+        btn.disabled = false;
+        btn.textContent = 'Run Cost Analysis';
+        document.getElementById('email-est-loading').textContent = 'Request failed — check console.';
+    }
+}
+
+async function emailCostCheck(emailId) {
+    const res = await fetch(`/api/emails?tab=pending`);
+    const data = await res.json();
+    const e = data.emails.find(x => x.id === emailId);
+    if (e && e.proposal_id) {
+        emailEstimateProposalId = e.proposal_id;
+        showDetail(emailId);
+        setTimeout(() => {
+            document.getElementById('email-ci-panel').scrollIntoView({behavior:'smooth'});
+            runEstimate();
+        }, 400);
+    }
+}
+
+function onPriceSlider() {
+    if (!emailPriceData) return;
+    const slider = document.getElementById('email-price-slider');
+    const t = parseInt(slider.value) / 1000;
+    const selectedPrice = emailPriceData.min + t * (emailPriceData.max - emailPriceData.min);
+    const cost = emailPriceData.cost;
+    const margin = cost > 0 ? ((selectedPrice - cost) / selectedPrice * 100) : 0;
+
+    document.getElementById('price-selected').textContent = 'INR ' + ciFmt(selectedPrice);
+    document.getElementById('price-margin').textContent = margin.toFixed(1) + '%';
+    document.getElementById('price-margin').style.color = margin < 5 ? '#ef4444' : margin < 10 ? '#d97706' : '#059669';
+
+    const bd = emailPriceData.breakdown;
+    const labels = {material: 'Material', labour: 'Labour', engineering: 'Engineering', overhead: 'Overhead', freight: 'Freight'};
+    const colors = {material: '#2563eb', labour: '#059669', engineering: '#7c3aed', overhead: '#d97706', freight: '#64748b'};
+    let html = '';
+    for (const key of ['material','labour','engineering','overhead','freight']) {
+        const pct = bd[key] || 0;
+        const amt = selectedPrice * pct / 100;
+        html += `<div style="background:${colors[key]}12; border-radius:8px; padding:8px; text-align:center;">
+            <div style="font-size:10px; color:#64748b; font-weight:600;">${labels[key].toUpperCase()}</div>
+            <div style="font-size:14px; font-weight:700; color:${colors[key]};">${pct.toFixed(1)}%</div>
+            <div style="font-size:11px; color:#475569;">INR ${ciFmt(amt)}</div>
+        </div>`;
+    }
+    document.getElementById('email-price-breakdown').innerHTML = html;
+    emailPriceData.selectedPrice = selectedPrice;
+    emailPriceData.selectedMargin = margin;
+}
+
+async function approveWithPrice() {
+    if (!currentEmailId || !emailPriceData || !emailPriceData.selectedPrice) return;
+    const btn = document.getElementById('email-approve-send-btn');
+    if (!confirm('Approve and send this quote at INR ' + ciFmt(emailPriceData.selectedPrice) + '?')) return;
+    btn.disabled = true;
+    btn.textContent = 'Sending...';
+    try {
+        const form = new FormData();
+        form.append('total_price', emailPriceData.selectedPrice);
+        const res = await fetch(`/api/emails/${currentEmailId}/approve-with-price`, {method: 'POST', body: form});
+        const data = await safeJson(res);
+        if (res.ok) {
+            const disc = data.discount_pct_vs_recommendation || 0;
+            showAlert('Quote sent at INR ' + ciFmt(data.price_applied) + (disc ? ` (${disc.toFixed(1)}% vs recommendation — recorded in audit history)` : ''), false);
+            closeDetail();
+        } else if (res.status === 409 && confirm(data.detail + '\n\nOK to provide an approval justification and force the send.')) {
+            const reason = prompt('Approval justification (required):');
+            if (!reason || !reason.trim()) { showAlert('Override cancelled — justification is required.', true); refresh(); return; }
+            form.append('justification', reason.trim());
+            form.append('force', 'true');
+            const res2 = await fetch(`/api/emails/${currentEmailId}/approve-with-price`, {method: 'POST', body: form});
+            const data2 = await safeJson(res2);
+            if (res2.ok) {
+                showAlert('Quote sent at INR ' + ciFmt(data2.price_applied) + ' with policy override (recorded in audit history).', false);
+                closeDetail();
+            } else showAlert(data2.detail || 'Failed to send.', true);
+        } else {
+            showAlert(data.detail || 'Failed to send.', true);
+        }
+    } catch (err) {
+        showAlert('Send failed: ' + err.message, true);
+    }
+    btn.disabled = false;
+    btn.textContent = 'Approve & Send Quote';
+    refresh();
+}
+
+async function safeJson(res) {
+    try {
+        return await res.json();
+    } catch (e) {
+        const text = await res.text().catch(() => '');
+        throw new Error(`Server error (${res.status}). ${text.slice(0, 200)}`);
+    }
+}
+
+refresh();
+setInterval(loadCounts, 30000);
+</script>
+{% endblock %}

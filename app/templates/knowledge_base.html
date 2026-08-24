@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+{% block title %}Knowledge Base - ISGEC{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div class="page-header-title">
+        <h1>Engineering Knowledge Base</h1>
+        <p>Technical standards, directive policies, pricing manuals, and equipment guidelines</p>
+    </div>
+    <div class="flex gap-2">
+        <button class="btn btn-primary" onclick="document.getElementById('upload-modal').style.display='flex'">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Upload Knowledge Base Document
+        </button>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="flex gap-3 items-center">
+        <div style="flex:1; position:relative;">
+            <input type="text" id="search-input" class="form-control" style="padding-left:40px;" placeholder="Search knowledge base (e.g. 'carbon steel pricing', 'TEMA heat exchanger', 'ASME Section VIII')..." onkeypress="if(event.key==='Enter')searchKB()">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" style="position:absolute; left:14px; top:13px;"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        </div>
+        <button class="btn btn-primary" onclick="searchKB()">Search Vector DB</button>
+    </div>
+</div>
+
+<div id="search-results" style="display:none;" class="mb-4">
+    <div class="card" style="border:1.5px solid var(--primary-gold);">
+        <h3>Vector Search Results</h3>
+        <div id="search-results-list"></div>
+    </div>
+</div>
+
+<div class="flex gap-4" style="align-items:flex-start;">
+    <div style="width:280px; flex-shrink:0;">
+        <div class="card">
+            <h3>Knowledge Spaces</h3>
+            <div id="spaces-list"><p class="text-muted text-sm">Loading spaces...</p></div>
+        </div>
+    </div>
+    <div style="flex:1;">
+        <div class="card">
+            <div class="flex justify-between items-center mb-4">
+                <h3 id="articles-title">All Indexed Articles</h3>
+                <span class="text-sm text-muted font-mono" id="article-count"></span>
+            </div>
+            <div id="articles-list"><p class="text-muted text-sm">Loading articles...</p></div>
+        </div>
+    </div>
+</div>
+
+<!-- Glass Modal for KB Upload -->
+<div id="upload-modal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15, 23, 42, 0.6); backdrop-filter:blur(8px); z-index:1000; align-items:center; justify-content:center;">
+    <div class="card" style="width:520px; max-width:90vw; background:white; border-radius:20px; padding:28px;">
+        <h3 style="margin-bottom:8px;">Upload Knowledge Base Document</h3>
+        <p class="text-sm text-muted mb-4">Supported formats: JSON, CSV, PDF, DOCX, TXT. Automatically chunked & embedded into vector database.</p>
+        <div class="upload-zone" id="kb-drop-zone" onclick="document.getElementById('kb-file-input').click()" style="padding:32px 16px;">
+            <div class="upload-icon" style="font-size:36px;">📖</div>
+            <p style="font-weight:600; color:#0f172a;" class="mt-2">Click to select file or drag & drop</p>
+            <p class="text-xs text-muted mt-2">JSON (ISGEC format), CSV, PDF, DOCX, TXT</p>
+        </div>
+        <input type="file" id="kb-file-input" accept=".json,.csv,.txt,.pdf,.docx" style="display:none;" onchange="uploadKBFile(this.files[0])">
+        <div id="upload-status" class="mt-4" style="display:none;"></div>
+        <div class="flex gap-2 mt-4" style="justify-content:flex-end;">
+            <button class="btn btn-secondary" onclick="document.getElementById('upload-modal').style.display='none'">Cancel</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentSpace = '';
+
+async function loadSpaces() {
+    const res = await fetch('/api/kb/spaces');
+    const data = await res.json();
+    const container = document.getElementById('spaces-list');
+    if (!data.spaces || data.spaces.length === 0) {
+        container.innerHTML = '<p class="text-muted text-sm">No knowledge base spaces indexed.</p>';
+        return;
+    }
+    let html = '<div style="display:flex; flex-direction:column; gap:6px;">';
+    html += `
+        <div class="space-item ${!currentSpace ? 'active' : ''}" onclick="filterSpace('')" 
+             style="padding:10px 14px; border-radius:10px; cursor:pointer; font-size:13.5px; transition:all 0.2s; ${!currentSpace ? 'background:linear-gradient(135deg, #f6c215 0%, #e0aa00 100%); color:#0f172a; font-weight:700;' : 'color:#334155;'}">
+             All Knowledge Spaces
+        </div>`;
+    data.spaces.forEach(s => {
+        html += `
+            <div class="space-item ${currentSpace === s.name ? 'active' : ''}" onclick="filterSpace('${s.name.replace(/'/g, "\\'")}')" 
+                 style="padding:10px 14px; border-radius:10px; cursor:pointer; font-size:13.5px; display:flex; justify-content:space-between; align-items:center; transition:all 0.2s; ${currentSpace === s.name ? 'background:linear-gradient(135deg, #f6c215 0%, #e0aa00 100%); color:#0f172a; font-weight:700;' : 'color:#334155;'}">
+                <span>${s.name}</span>
+                <span class="badge" style="background:rgba(255,255,255,0.6); color:#0f172a; font-size:11px;">${s.article_count}</span>
+            </div>`;
+    });
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+async function loadArticles(space) {
+    const url = space ? `/api/kb/articles?space=${encodeURIComponent(space)}` : '/api/kb/articles';
+    const res = await fetch(url);
+    const data = await res.json();
+    const container = document.getElementById('articles-list');
+    const titleEl = document.getElementById('articles-title');
+    const countEl = document.getElementById('article-count');
+    titleEl.textContent = space || 'All Articles';
+    countEl.textContent = `${data.total} article${data.total !== 1 ? 's' : ''}`;
+    
+    if (!data.articles || data.articles.length === 0) {
+        container.innerHTML = `
+            <div style="text-align:center; padding:48px 16px;" class="text-muted">
+                <div style="font-size:36px; margin-bottom:12px;">📖</div>
+                <p style="font-weight:600;">No articles in this space.</p>
+            </div>`;
+        return;
+    }
+    
+    let html = '<div style="display:flex; flex-direction:column; gap:14px;">';
+    data.articles.forEach(a => {
+        const typeColors = { policy: '#f59e0b', directive: '#059669', note: '#6366f1', document: '#475569' };
+        const typeColor = typeColors[a.type] || '#64748b';
+        html += `
+            <div style="border:1px solid rgba(226, 232, 240, 0.8); border-radius:14px; padding:18px; background:rgba(255,255,255,0.6);" class="kb-article-card">
+                <div class="flex justify-between items-center mb-2">
+                    <div class="flex items-center gap-2">
+                        <span style="background:${typeColor}; color:white; padding:3px 10px; border-radius:12px; font-size:10.5px; font-weight:800; text-transform:uppercase;">${a.type || 'article'}</span>
+                        <strong style="font-size:15px; color:#0f172a;">${a.title}</strong>
+                    </div>
+                    <button class="btn btn-sm btn-danger" onclick="deleteArticle('${a.id}')">Delete</button>
+                </div>
+                <div class="flex gap-2 mb-2 items-center" style="flex-wrap:wrap;">
+                    <span class="badge" style="background:rgba(226,232,240,0.8); color:#334155;">${a.space}</span>
+                    ${a.tags ? a.tags.map(t => `<span class="badge" style="background:rgba(241,245,249,0.8); color:#64748b;">#${t}</span>`).join('') : ''}
+                </div>
+                <div class="text-xs text-muted font-mono">${a.chunk_count} chunk${a.chunk_count !== 1 ? 's' : ''} in vector index</div>
+            </div>`;
+    });
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+function filterSpace(space) {
+    currentSpace = space;
+    loadSpaces();
+    loadArticles(space);
+}
+
+async function searchKB() {
+    const query = document.getElementById('search-input').value.trim();
+    if (!query) return;
+    const container = document.getElementById('search-results');
+    const list = document.getElementById('search-results-list');
+    container.style.display = 'block';
+    list.innerHTML = '<p class="text-muted text-sm" style="padding:16px;">Searching vector embeddings...</p>';
+    const res = await fetch(`/api/kb/search?query=${encodeURIComponent(query)}&limit=8`, { method: 'POST' });
+    const data = await res.json();
+    if (!data.results || data.results.length === 0) {
+        list.innerHTML = '<p class="text-muted" style="padding:16px;">No vector similarity matches found.</p>';
+        return;
+    }
+    let html = '<div style="display:flex; flex-direction:column; gap:12px; margin-top:12px;">';
+    data.results.forEach(r => {
+        html += `
+            <div style="border:1px solid rgba(246, 194, 21, 0.4); border-radius:12px; padding:14px; background:rgba(255,251,235,0.7);">
+                <div class="flex justify-between items-center mb-2">
+                    <strong style="color:#0f172a;">${r.title}</strong>
+                    <span class="badge badge-accepted">Score: ${r.score.toFixed(3)}</span>
+                </div>
+                <div class="badge" style="background:rgba(226,232,240,0.8); color:#334155; margin-bottom:8px;">${r.space}</div>
+                <p style="font-size:13px; line-height:1.55; color:#334155; white-space:pre-wrap;">${r.body_chunk.substring(0, 500)}${r.body_chunk.length > 500 ? '...' : ''}</p>
+            </div>`;
+    });
+    html += '</div>';
+    list.innerHTML = html;
+}
+
+const dropZone = document.getElementById('kb-drop-zone');
+if (dropZone) {
+    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.style.borderColor = '#f6c215'; dropZone.style.background = '#fffbf0'; });
+    dropZone.addEventListener('dragleave', () => { dropZone.style.borderColor = 'rgba(246, 194, 21, 0.5)'; dropZone.style.background = ''; });
+    dropZone.addEventListener('drop', e => {
+        e.preventDefault();
+        dropZone.style.borderColor = 'rgba(246, 194, 21, 0.5)';
+        dropZone.style.background = '';
+        if (e.dataTransfer.files.length) uploadKBFile(e.dataTransfer.files[0]);
+    });
+}
+
+async function uploadKBFile(file) {
+    if (!file) return;
+    const status = document.getElementById('upload-status');
+    status.style.display = 'block';
+    status.innerHTML = '<p class="text-sm font-bold" style="color:#d99b00;">Uploading and embedding document vector chunks...</p>';
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+        const res = await fetch('/api/kb/upload', { method: 'POST', body: formData });
+        const data = await res.json();
+        if (res.ok) {
+            status.innerHTML = `<p class="badge badge-accepted" style="font-size:13px; padding:6px 12px;">✓ Imported ${data.articles} articles (${data.chunks} chunks)</p>`;
+            loadSpaces();
+            loadArticles(currentSpace);
+            setTimeout(() => { document.getElementById('upload-modal').style.display = 'none'; status.style.display = 'none'; }, 2000);
+        } else {
+            status.innerHTML = `<p style="color:#ef4444;">Error: ${data.detail || 'Upload failed'}</p>`;
+        }
+    } catch(e) {
+        status.innerHTML = `<p style="color:#ef4444;">Error: ${e.message}</p>`;
+    }
+}
+
+async function deleteArticle(id) {
+    if (!confirm('Delete this article from Knowledge Base?')) return;
+    await fetch(`/api/kb/articles/${id}`, { method: 'DELETE' });
+    loadSpaces();
+    loadArticles(currentSpace);
+}
+
+loadSpaces();
+loadArticles('');
+</script>
+{% endblock %}

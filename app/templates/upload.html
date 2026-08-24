@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% block title %}Upload Specifications & Data - ISGEC{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div class="page-header-title">
+        <h1>Upload System Data</h1>
+        <p>Batch import equipment catalog CSVs, customer records, or parse RFQ documents</p>
+    </div>
+</div>
+
+<div class="grid grid-2 mb-4">
+    <div class="card">
+        <h3>
+            <span class="flex items-center gap-2">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+                Product Catalog (CSV)
+            </span>
+        </h3>
+        <p class="text-sm text-muted mb-4">Required columns: <code>sku, name, description, price_net, price_gross, vat_rate, currency</code></p>
+        <form id="product-upload-form" enctype="multipart/form-data">
+            <div class="upload-zone" id="product-drop" onclick="document.getElementById('product-file').click()">
+                <div class="upload-icon">📦</div>
+                <p style="font-weight:600; color:#0f172a;">Click to select product CSV or drop file</p>
+                <p class="text-xs text-muted mt-1">Automatic AI vector embedding generation</p>
+                <input type="file" id="product-file" name="file" accept=".csv" style="display:none" onchange="uploadProducts()">
+            </div>
+            <div id="product-result" class="mt-3"></div>
+        </form>
+    </div>
+
+    <div class="card">
+        <h3>
+            <span class="flex items-center gap-2">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                Customer Database (CSV)
+            </span>
+        </h3>
+        <p class="text-sm text-muted mb-4">Required columns: <code>name, sector (optional), source (optional)</code></p>
+        <form id="customer-upload-form" enctype="multipart/form-data">
+            <div class="upload-zone" id="customer-drop" onclick="document.getElementById('customer-file').click()">
+                <div class="upload-icon">👥</div>
+                <p style="font-weight:600; color:#0f172a;">Click to select customer CSV or drop file</p>
+                <p class="text-xs text-muted mt-1">Batch import client registry</p>
+                <input type="file" id="customer-file" name="file" accept=".csv" style="display:none" onchange="uploadCustomers()">
+            </div>
+            <div id="customer-result" class="mt-3"></div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <h3>
+        <span class="flex items-center gap-2">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            Upload Technical RFQ Document (PDF / DOCX / TXT)
+        </span>
+    </h3>
+    <p class="text-sm text-muted mb-4">Docling AI parser extracts structured text and specs directly from tender documents.</p>
+    <div class="upload-zone" onclick="document.getElementById('rfq-file').click()">
+        <div class="upload-icon">📄</div>
+        <p style="font-weight:600; color:#0f172a;">Click to choose PDF, DOCX or TXT tender document</p>
+        <input type="file" id="rfq-file" accept=".pdf,.docx,.doc,.txt" style="display:none" onchange="previewRfqFile(this)">
+    </div>
+    <div id="rfq-preview" class="mt-4" style="display:none;">
+        <div class="form-group">
+            <label>Parsed Document Content:</label>
+            <textarea id="rfq-text" rows="6" placeholder="Parsed document text..."></textarea>
+        </div>
+        <button class="btn btn-primary" onclick="submitRfqFile()">Generate Commercial Proposal</button>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function uploadProducts() {
+    const file = document.getElementById('product-file').files[0];
+    if (!file) return;
+    const resultDiv = document.getElementById('product-result');
+    resultDiv.innerHTML = '<p class="text-muted" style="font-weight:600;">Processing CSV & generating embeddings...</p>';
+    const form = new FormData();
+    form.append('file', file);
+    const res = await fetch('/api/catalog/upload', {method: 'POST', body: form});
+    const data = await res.json();
+    if (data.imported !== undefined) {
+        resultDiv.innerHTML = `
+            <div class="badge badge-accepted" style="font-size:13px; padding:6px 12px;">
+                ✓ ${data.imported} products imported successfully (${data.errors?.length || 0} skipped)
+            </div>
+        `;
+    } else {
+        resultDiv.innerHTML = `<p style="color:#ef4444;">Error: ${data.detail || 'Upload failed'}</p>`;
+    }
+}
+
+async function uploadCustomers() {
+    const file = document.getElementById('customer-file').files[0];
+    if (!file) return;
+    const resultDiv = document.getElementById('customer-result');
+    resultDiv.innerHTML = '<p class="text-muted" style="font-weight:600;">Uploading customers...</p>';
+    const form = new FormData();
+    form.append('file', file);
+    const res = await fetch('/api/customers/upload', {method: 'POST', body: form});
+    const data = await res.json();
+    if (data.imported !== undefined) {
+        resultDiv.innerHTML = `
+            <div class="badge badge-accepted" style="font-size:13px; padding:6px 12px;">
+                ✓ ${data.imported} customers imported successfully
+            </div>
+        `;
+    } else {
+        resultDiv.innerHTML = `<p style="color:#ef4444;">Error: ${data.detail || 'Upload failed'}</p>`;
+    }
+}
+
+async function previewRfqFile(input) {
+    const file = input.files[0];
+    if (!file) return;
+    const preview = document.getElementById('rfq-preview');
+    const textarea = document.getElementById('rfq-text');
+    preview.style.display = 'block';
+    if (file.name.endsWith('.txt')) {
+        const text = await file.text();
+        textarea.value = text;
+    } else {
+        textarea.value = `[Parsing file: ${file.name}... Please wait]`;
+        const form = new FormData();
+        form.append('rfq_file', file);
+        const res = await fetch('/api/rfq/upload', {method: 'POST', body: form});
+        const data = await res.json();
+        if (data.proposal_id) {
+            window.location.href = `/proposal/${data.proposal_id}`;
+            return;
+        }
+    }
+}
+
+async function submitRfqFile() {
+    const text = document.getElementById('rfq-text').value;
+    if (!text.trim()) { alert('No RFQ text to submit'); return; }
+    const form = new FormData();
+    form.append('rfq_text', text);
+    const res = await fetch('/api/rfq', {method: 'POST', body: form});
+    const data = await res.json();
+    if (data.proposal_id) {
+        window.location.href = `/proposal/${data.proposal_id}`;
+    } else {
+        alert('Error: ' + (data.detail || 'Failed to generate proposal'));
+    }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}Proposals - ISGEC Proposal System{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div class="page-header-title">
+        <h1>Proposals Repository</h1>
+        <p>Commercial proposals, status tracking, and financial breakdown</p>
+    </div>
+    <a href="/rfq" class="btn btn-primary">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        New Proposal
+    </a>
+</div>
+
+<div class="card">
+    <div class="flex gap-3 mb-4 items-center justify-between">
+        <div class="flex gap-2 items-center">
+            <label class="text-sm font-bold text-muted">Status Filter:</label>
+            <select id="status-filter" class="form-control" style="width:180px;" onchange="loadProposals()">
+                <option value="">All Statuses</option>
+                <option value="draft">Draft</option>
+                <option value="sent">Sent</option>
+                <option value="accepted">Accepted</option>
+                <option value="rejected">Rejected</option>
+            </select>
+        </div>
+        <span class="text-xs text-muted" id="total-proposals-count">Loading count...</span>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Proposal #</th>
+                <th>Status</th>
+                <th>Total (Net)</th>
+                <th>Total (Gross)</th>
+                <th>Valid Until</th>
+                <th>Created Date</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="proposals-table">
+            <tr><td colspan="7" class="text-muted" style="text-align:center;padding:40px;">Loading proposals...</td></tr>
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function loadProposals() {
+    const status = document.getElementById('status-filter').value;
+    const params = new URLSearchParams({limit: 100});
+    if (status) params.set('status', status);
+    const res = await fetch(`/api/proposals?${params}`);
+    const data = await res.json();
+    const tbody = document.getElementById('proposals-table');
+    document.getElementById('total-proposals-count').textContent = `Showing ${data.proposals ? data.proposals.length : 0} of ${data.total || 0} proposals`;
+
+    if (!data.proposals || data.proposals.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="7" style="text-align:center; padding:48px 16px;">
+                    <div style="font-size:36px; margin-bottom:12px;">📑</div>
+                    <p class="text-muted" style="font-weight:600;">No proposals found matching criteria.</p>
+                    <a href="/rfq" class="btn btn-primary btn-sm mt-3">Create New Proposal</a>
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    tbody.innerHTML = data.proposals.map(p => `
+        <tr>
+            <td>
+                <a href="/proposal/${p.id}" style="font-weight:700;text-decoration:none;color:#0f172a; font-size:14px;">
+                    ${p.proposal_number}
+                </a>
+            </td>
+            <td><span class="badge badge-${p.status}">${p.status}</span></td>
+            <td class="font-mono">${p.currency} ${Number(p.total_net).toLocaleString('en-IN')}</td>
+            <td class="font-mono" style="font-weight:700; color:#0f172a;">${p.currency} ${Number(p.total_gross).toLocaleString('en-IN')}</td>
+            <td>${p.valid_until ? new Date(p.valid_until).toLocaleDateString() : '-'}</td>
+            <td>${p.created_at ? new Date(p.created_at).toLocaleDateString() : '-'}</td>
+            <td>
+                <a href="/proposal/${p.id}" class="btn btn-secondary btn-sm">
+                    View Detail &rarr;
+                </a>
+            </td>
+        </tr>
+    `).join('');
+}
+loadProposals();
+</script>
+{% endblock %}

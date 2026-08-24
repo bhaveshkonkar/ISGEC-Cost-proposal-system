@@ -1,0 +1,379 @@
+{% extends "base.html" %}
+{% block title %}Dashboard Overview - ISGEC Proposal System{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div class="page-header-title">
+        <h1>Dashboard Overview</h1>
+        <p>Real-time analytics, proposal pipeline metrics, and AI workflow controls</p>
+    </div>
+    <div class="flex gap-3">
+        <a href="/rfq" class="btn btn-primary">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            Create New Proposal
+        </a>
+    </div>
+</div>
+
+<!-- KPI Stat Cards -->
+<div class="grid grid-4 mb-4" style="grid-template-columns:repeat(5,1fr);">
+    <div class="card stat-card">
+        <div class="stat-card-header">
+            <span class="label">Total Proposals</span>
+            <div class="stat-card-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                </svg>
+            </div>
+        </div>
+        <div class="number" id="proposal-count">-</div>
+        <div class="flex items-center justify-between mt-2">
+            <span class="stat-trend up">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                    <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
+                    <polyline points="17 6 23 6 23 12" />
+                </svg>
+                Active Pipeline
+            </span>
+            <span class="text-xs text-muted">All Time</span>
+        </div>
+    </div>
+
+    <div class="card stat-card">
+        <div class="stat-card-header">
+            <span class="label">Total Sales</span>
+            <div class="stat-card-icon emerald">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="20 6 9 17 4 12" />
+                </svg>
+            </div>
+        </div>
+        <div class="number" id="sales-value-count" style="font-size:24px; color:#059669;">-</div>
+        <div class="flex items-center justify-between mt-2">
+            <span class="stat-trend up">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                    <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
+                    <polyline points="17 6 23 6 23 12" />
+                </svg>
+                <span id="paid-count-label">0 paid</span>
+            </span>
+            <span class="text-xs text-muted">Received</span>
+        </div>
+    </div>
+
+    <div class="card stat-card">
+        <div class="stat-card-header">
+            <span class="label">Total Quoted Value</span>
+            <div class="stat-card-icon emerald">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="1" x2="12" y2="23" />
+                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                </svg>
+            </div>
+        </div>
+        <div class="number" id="quoted-value-count" style="font-size:24px; color:#059669;">-</div>
+        <div class="flex items-center justify-between mt-2">
+            <span class="stat-trend up">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                    <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
+                    <polyline points="17 6 23 6 23 12" />
+                </svg>
+                Gross Value
+            </span>
+            <span class="text-xs text-muted">INR</span>
+        </div>
+    </div>
+
+    <div class="card stat-card">
+        <div class="stat-card-header">
+            <span class="label">Catalog Products</span>
+            <div class="stat-card-icon blue">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path
+                        d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                </svg>
+            </div>
+        </div>
+        <div class="number" id="product-count">-</div>
+        <div class="flex items-center justify-between mt-2">
+            <span class="text-xs text-muted">Equipment DB</span>
+            <span class="text-xs font-bold" style="color:var(--accent-cyan)">Indexed</span>
+        </div>
+    </div>
+
+    <div class="card stat-card">
+        <div class="stat-card-header">
+            <span class="label">Active Customers</span>
+            <div class="stat-card-icon purple">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                    <circle cx="9" cy="7" r="4" />
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                </svg>
+            </div>
+        </div>
+        <div class="number" id="customer-count">-</div>
+        <div class="flex items-center justify-between mt-2">
+            <span class="text-xs text-muted">Global Clients</span>
+            <span class="text-xs font-bold" style="color:var(--accent-indigo)">Verified</span>
+        </div>
+    </div>
+</div>
+
+<!-- Dynamic Analytics Charts Grid -->
+<div class="grid grid-2 mb-4">
+    <div class="card">
+        <h3>
+            <span>Proposal Pipeline Breakdown</span>
+            <span class="text-xs text-muted font-mono" id="chart-total-label">Total: 0</span>
+        </h3>
+        <div style="position: relative; height: 260px; display: flex; align-items: center; justify-content: center;">
+            <canvas id="pipelineChart"></canvas>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3>
+            <span>Quoted Financial Value by Status</span>
+            <span class="text-xs text-muted">In Lakhs / Crores</span>
+        </h3>
+        <div style="position: relative; height: 260px;">
+            <canvas id="financialChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Proposals & Quick Actions Grid -->
+<div class="grid grid-2">
+    <div class="card">
+        <h3>
+            <span>Recent Proposals</span>
+            <a href="/proposals" class="btn btn-secondary btn-sm">View All &rarr;</a>
+        </h3>
+        <div id="recent-proposals">
+            <div class="text-muted" style="text-align:center; padding:40px;">
+                Loading recent proposals...
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3>Quick Workflow Actions</h3>
+        <div style="display: flex; flex-direction: column; gap: 14px; margin-top: 8px;">
+            <a href="/rfq" class="btn btn-primary" style="padding: 14px 20px; justify-content: flex-start;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <line x1="12" y1="18" x2="12" y2="12" />
+                    <line x1="9" y1="15" x2="15" y2="15" />
+                </svg>
+                Generate Proposal from RFQ Document / Text
+            </a>
+            <a href="/chat" class="btn btn-secondary" style="padding: 14px 20px; justify-content: flex-start;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                </svg>
+                Ask Engineering AI Assistant
+            </a>
+            <a href="/upload" class="btn btn-secondary" style="padding: 14px 20px; justify-content: flex-start;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="17 8 12 3 7 8" />
+                    <line x1="12" y1="3" x2="12" y2="15" />
+                </svg>
+                Upload Product Specifications (CSV / PDF)
+            </a>
+            <a href="/catalog" class="btn btn-secondary" style="padding: 14px 20px; justify-content: flex-start;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8" />
+                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+                Explore Equipment Catalog
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let pipelineChart = null;
+    let financialChart = null;
+
+    function formatCurrency(val) {
+        if (val >= 10000000) {
+            return '₹' + (val / 10000000).toFixed(2) + ' Cr';
+        } else if (val >= 100000) {
+            return '₹' + (val / 100000).toFixed(2) + ' L';
+        }
+        return '₹' + Number(val).toLocaleString('en-IN');
+    }
+
+    async function initDashboardCharts(stats) {
+        const counts = stats.status_counts || { draft: 0, sent: 0, accepted: 0, rejected: 0 };
+        const values = stats.status_values || { draft: 0, sent: 0, accepted: 0, rejected: 0 };
+
+        // 1. Pipeline Doughnut Chart
+        const ctxPipeline = document.getElementById('pipelineChart').getContext('2d');
+        if (pipelineChart) pipelineChart.destroy();
+
+        pipelineChart = new Chart(ctxPipeline, {
+            type: 'doughnut',
+            data: {
+                labels: ['Draft', 'Sent', 'Accepted', 'Rejected'],
+                datasets: [{
+                    data: [counts.draft, counts.sent, counts.accepted, counts.rejected],
+                    backgroundColor: [
+                        '#f59e0b',
+                        '#3b82f6',
+                        '#10b981',
+                        '#ef4444'
+                    ],
+                    borderWidth: 2,
+                    borderColor: '#ffffff',
+                    hoverOffset: 8
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'right',
+                        labels: {
+                            font: { family: 'Plus Jakarta Sans', size: 13, weight: 600 },
+                            padding: 16,
+                            usePointStyle: true,
+                            pointStyle: 'circle'
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function (context) {
+                                const val = context.raw || 0;
+                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                const pct = total > 0 ? ((val / total) * 100).toFixed(1) : 0;
+                                return ` ${context.label}: ${val} (${pct}%)`;
+                            }
+                        }
+                    }
+                },
+                cutout: '70%'
+            }
+        });
+
+        // 2. Financial Bar Chart
+        const ctxFinancial = document.getElementById('financialChart').getContext('2d');
+        if (financialChart) financialChart.destroy();
+
+        financialChart = new Chart(ctxFinancial, {
+            type: 'bar',
+            data: {
+                labels: ['Draft', 'Sent', 'Accepted', 'Rejected'],
+                datasets: [{
+                    label: 'Gross Quoted Value (₹)',
+                    data: [values.draft, values.sent, values.accepted, values.rejected],
+                    backgroundColor: [
+                        'rgba(245, 158, 11, 0.75)',
+                        'rgba(59, 130, 246, 0.75)',
+                        'rgba(16, 185, 129, 0.75)',
+                        'rgba(239, 68, 68, 0.75)'
+                    ],
+                    borderColor: [
+                        '#f59e0b',
+                        '#3b82f6',
+                        '#10b981',
+                        '#ef4444'
+                    ],
+                    borderWidth: 1.5,
+                    borderRadius: 8
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: function (ctx) {
+                                return ' Quoted: ' + formatCurrency(ctx.raw);
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: { color: 'rgba(226, 232, 240, 0.6)' },
+                        ticks: {
+                            font: { family: 'Plus Jakarta Sans', size: 11 },
+                            callback: function (val) { return formatCurrency(val); }
+                        }
+                    },
+                    x: {
+                        grid: { display: false },
+                        ticks: { font: { family: 'Plus Jakarta Sans', size: 12, weight: 600 } }
+                    }
+                }
+            }
+        });
+    }
+
+    async function loadDashboard() {
+        try {
+            const [statsRes, propsRes] = await Promise.all([
+                fetch('/api/dashboard/stats').then(r => r.json()),
+                fetch('/api/proposals?limit=5').then(r => r.json()),
+            ]);
+
+            document.getElementById('proposal-count').textContent = statsRes.total_proposals || 0;
+            document.getElementById('sales-value-count').textContent = formatCurrency(statsRes.total_sales || 0);
+            document.getElementById('paid-count-label').textContent = (statsRes.paid_count || 0) + ' paid';
+            document.getElementById('quoted-value-count').textContent = formatCurrency(statsRes.total_quoted_value || 0);
+            document.getElementById('product-count').textContent = statsRes.total_products || 0;
+            document.getElementById('customer-count').textContent = statsRes.total_customers || 0;
+            document.getElementById('chart-total-label').textContent = 'Total: ' + (statsRes.total_proposals || 0);
+
+            // Render Chart.js charts
+            initDashboardCharts(statsRes);
+
+            // Render Recent Proposals List
+            const container = document.getElementById('recent-proposals');
+            if (propsRes.proposals && propsRes.proposals.length > 0) {
+                container.innerHTML = propsRes.proposals.map(p => `
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid rgba(226, 232, 240, 0.8);">
+                    <div>
+                        <a href="/proposal/${p.id}" style="font-weight:700;text-decoration:none;color:#0f172a;font-size:14px;">${p.proposal_number}</a>
+                        <div class="text-sm text-muted mt-2">
+                            ${p.created_at ? new Date(p.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : ''}
+                        </div>
+                    </div>
+                    <div style="text-align:right;">
+                        <span class="badge badge-${p.status}">${p.status}</span>
+                        <div class="text-sm font-mono mt-2" style="font-weight:600;color:#0f172a;">
+                            ${p.currency} ${Number(p.total_net).toLocaleString('en-IN', { minimumFractionDigits: 0 })}
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+            } else {
+                container.innerHTML = `
+                <div style="text-align:center; padding:36px 16px;" class="text-muted">
+                    <p>No proposals created yet.</p>
+                    <a href="/rfq" class="btn btn-primary btn-sm mt-4">Create your first proposal</a>
+                </div>
+            `;
+            }
+        } catch (e) {
+            console.error('Failed to load dashboard data:', e);
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', loadDashboard);
+</script>
+{% endblock %}

@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: Arial, Helvetica, sans-serif; color: #1a1a2e; margin: 0; padding: 24px; background: #ffffff; }
+        .wrap { max-width: 720px; margin: 0 auto; }
+        .header { border-bottom: 3px solid #f6c215; padding-bottom: 12px; margin-bottom: 20px; }
+        .logo { font-size: 22px; font-weight: bold; }
+        .logo span { color: #f6c215; }
+        .sub { font-size: 12px; color: #888; }
+        .quote-meta { line-height: 1.6; }
+        .mobile-break { display: none; }
+        .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        h3 { font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; color: #666; margin: 24px 0 8px; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th { background: #1a1a2e; color: #fff; padding: 10px; text-align: left; }
+        td { padding: 10px; border-bottom: 1px solid #eee; vertical-align: top; }
+        .num { text-align: right; white-space: nowrap; }
+        .total-row td { font-weight: bold; background: #f8f9fa; border-top: 2px solid #1a1a2e; }
+        .note-box { background: #fffbf0; border-left: 4px solid #f6c215; padding: 12px 16px; font-size: 13px; margin: 8px 0; }
+        .decline-box { background: #fdf2f2; border-left: 4px solid #dc3545; padding: 12px 16px; font-size: 13px; margin: 8px 0; }
+        .terms { font-size: 12px; color: #555; line-height: 1.6; margin-top: 24px; padding-top: 12px; border-top: 1px solid #ddd; }
+        .footer { font-size: 11px; color: #999; margin-top: 24px; }
+        @media only screen and (max-width: 600px) {
+            body { padding: 14px 10px; }
+            .wrap { width: 100%; }
+            .header { margin-bottom: 16px; }
+            .logo { font-size: 19px; }
+            p { font-size: 14px; line-height: 1.5; }
+            .quote-meta { font-size: 13px; }
+            .mobile-break { display: block; }
+            h3 { font-size: 13px; margin-top: 20px; }
+            .table-wrap { margin-right: -2px; }
+            table { min-width: 620px; font-size: 12px; }
+            th, td { padding: 8px; }
+            .note-box, .decline-box { padding: 10px 12px; font-size: 12px; line-height: 1.5; }
+            .payment-box { margin: 20px 0 !important; padding: 16px 10px; background: #fffbf0; border: 1px solid #f6c215; border-radius: 8px; }
+            .payment-button { display: block !important; padding: 14px 10px !important; font-size: 14px !important; }
+            .terms { font-size: 11px; }
+        }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <div class="header">
+        <div class="logo">ISGEC <span>|</span> Heavy Engineering</div>
+        <div class="sub">Process Equipment Division</div>
+    </div>
+
+    <p>Dear Customer,</p>
+    <p>Thank you for your enquiry. Please find our quotation below.</p>
+
+    <p class="quote-meta"><strong>Quotation No:</strong> {{ proposal_number }}<br class="mobile-break"> <strong>Valid Until:</strong> {{ valid_until }}</p>
+
+    {% if quoted_items %}
+    <h3>Quoted Items</h3>
+    <div class="table-wrap"><table>
+        <thead>
+            <tr>
+                <th>#</th><th>SKU</th><th>Description</th><th class="num">Qty</th>
+                <th class="num">Unit Price (Net)</th><th class="num">Subtotal (Net)</th><th class="num">Subtotal (Gross)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in quoted_items %}
+            <tr>
+                <td>{{ loop.index }}</td>
+                <td>{{ item.sku }}</td>
+                <td>{{ item.description }}</td>
+                <td class="num">{{ item.quantity }}</td>
+                <td class="num">{{ item.currency }} {{ "%.2f"|format(item.unit_price_net) }}</td>
+                <td class="num">{{ item.currency }} {{ "%.2f"|format(item.subtotal_net) }}</td>
+                <td class="num">{{ item.currency }} {{ "%.2f"|format(item.subtotal_gross) }}</td>
+            </tr>
+            {% endfor %}
+            <tr class="total-row">
+                <td colspan="5">Total</td>
+                <td class="num">{{ currency }} {{ "%.2f"|format(total_net) }}</td>
+                <td class="num">{{ currency }} {{ "%.2f"|format(total_gross) }}</td>
+            </tr>
+        </tbody>
+    </table></div>
+    {% endif %}
+
+    {% if cost_breakdown %}
+    <h3>Cost Breakdown</h3>
+    <div class="table-wrap"><table style="max-width:480px;">
+        <thead>
+            <tr><th>Component</th><th class="num">Share (%)</th><th class="num">Amount ({{ currency }})</th></tr>
+        </thead>
+        <tbody>
+            {% if cost_breakdown.material %}
+            <tr><td>Material</td><td class="num">{{ "%.1f"|format(cost_breakdown.material) }}%</td><td class="num">{{ currency }} {{ "%.0f"|format(total_net * cost_breakdown.material / 100) }}</td></tr>
+            {% endif %}
+            {% if cost_breakdown.labour %}
+            <tr><td>Labour</td><td class="num">{{ "%.1f"|format(cost_breakdown.labour) }}%</td><td class="num">{{ currency }} {{ "%.0f"|format(total_net * cost_breakdown.labour / 100) }}</td></tr>
+            {% endif %}
+            {% if cost_breakdown.engineering %}
+            <tr><td>Engineering</td><td class="num">{{ "%.1f"|format(cost_breakdown.engineering) }}%</td><td class="num">{{ currency }} {{ "%.0f"|format(total_net * cost_breakdown.engineering / 100) }}</td></tr>
+            {% endif %}
+            {% if cost_breakdown.overhead %}
+            <tr><td>Overhead</td><td class="num">{{ "%.1f"|format(cost_breakdown.overhead) }}%</td><td class="num">{{ currency }} {{ "%.0f"|format(total_net * cost_breakdown.overhead / 100) }}</td></tr>
+            {% endif %}
+            {% if cost_breakdown.freight %}
+            <tr><td>Freight</td><td class="num">{{ "%.1f"|format(cost_breakdown.freight) }}%</td><td class="num">{{ currency }} {{ "%.0f"|format(total_net * cost_breakdown.freight / 100) }}</td></tr>
+            {% endif %}
+            <tr class="total-row">
+                <td>Total</td>
+                <td class="num">100.0%</td>
+                <td class="num">{{ currency }} {{ "%.2f"|format(total_net) }}</td>
+            </tr>
+        </tbody>
+    </table></div>
+    {% endif %}
+
+    {% if on_request_items %}
+    <h3>Available on Request</h3>
+    <div class="note-box">
+        The following item(s) are not part of our standard catalog. However, we can arrange them for you.
+        If you are okay with the rest of the pricing, please confirm and we will proceed with sourcing these as well.
+    </div>
+    <div class="table-wrap"><table>
+        <thead><tr><th>#</th><th>Description</th><th class="num">Qty</th></tr></thead>
+        <tbody>
+            {% for item in on_request_items %}
+            <tr>
+                <td>{{ loop.index }}</td>
+                <td>{{ item.description }}<br><small style="color:#888">{{ item.notes }}</small></td>
+                <td class="num">{{ item.quantity }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table></div>
+    {% endif %}
+
+    {% if not_offered_items %}
+    <h3>Items Not Offered</h3>
+    {% for item in not_offered_items %}
+    <div class="decline-box">
+        Please note: <strong>{{ item.description }}</strong> is not a product manufactured or supplied by ISGEC.
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    {% if pay_url %}
+    <div class="payment-box" style="text-align:center;margin:24px 0 20px;padding:18px 10px;">
+        <div style="font-size:13px;color:#555;margin-bottom:10px;"><strong>Ready to proceed?</strong><br>Pay securely against this quotation.</div>
+        <a class="payment-button" href="{{ pay_url }}" style="display:inline-block;background:#f6c215;color:#1a1a2e;font-weight:bold;font-size:15px;padding:14px 36px;border-radius:8px;text-decoration:none;">
+            Pay {{ currency }} {{ "%.0f"|format(pay_amount) }} Now
+        </a>
+        <div style="font-size:11px;color:#888;margin-top:8px;">
+            Secure online payment via Razorpay &mdash; UPI / Card / NetBanking
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="terms">
+        <strong>Terms &amp; Conditions:</strong><br>
+        Payment: 30% advance, 70% on delivery. Delivery: 12-16 weeks from order confirmation.<br>
+        Prices are valid until {{ valid_until }}. GST applicable as per government norms.<br>
+        Certifications: ISO 9001:2015, ASME U/U-2/S/R Stamp, CE Marking.
+    </div>
+
+    <p style="margin-top:20px">We look forward to your confirmation.</p>
+    <p>Best regards,<br><strong>{{ sender_name }}</strong><br>ISGEC Heavy Engineering Ltd.</p>
+
+    <div class="footer">
+        This is an automated quotation generated by the ISGEC Proposal System. Reference: {{ proposal_number }}
+    </div>
+</div>
+</body>
+</html>

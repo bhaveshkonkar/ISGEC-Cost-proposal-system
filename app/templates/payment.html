@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secure Payment — ISGEC</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: Arial, Helvetica, sans-serif; color: #1a1a2e; margin: 0; padding: 16px; background: #f4f5f7; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+        .card { max-width: 460px; width: 100%; background: #fff; border-radius: 14px; box-shadow: 0 8px 30px rgba(0,0,0,.08); overflow: hidden; }
+        .header { background: #1a1a2e; color: #fff; padding: 20px 24px; }
+        .logo { font-size: 19px; font-weight: bold; letter-spacing: .3px; }
+        .logo span { color: #f6c215; }
+        .sub { font-size: 11px; color: #aab; margin-top: 2px; }
+        .body { padding: 22px 24px; text-align: center; }
+        .section-label { font-size: 11px; color: #889; text-transform: uppercase; letter-spacing: .6px; margin: 4px 0 10px; text-align: left; font-weight: bold; }
+        .details { background: #f8f9fb; border: 1px solid #eceef2; border-radius: 10px; padding: 4px 14px; text-align: left; }
+        .row { display: flex; justify-content: space-between; gap: 12px; font-size: 12.5px; color: #556; padding: 10px 0; border-bottom: 1px dashed #e5e7eb; }
+        .row:last-child { border-bottom: none; }
+        .row b { color: #1a1a2e; word-break: break-all; text-align: right; }
+        .cap-note { margin-top: 12px; font-size: 11px; color: #92400e; background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 8px 10px; text-align: left; }
+        .amount-block { margin-top: 22px; padding-top: 18px; border-top: 2px solid #f0f1f4; }
+        .amount-label { font-size: 12px; color: #889; text-transform: uppercase; letter-spacing: .5px; }
+        .amount { font-size: clamp(28px, 9vw, 36px); font-weight: 800; color: #059669; margin: 4px 0 2px; line-height: 1.15; }
+        .btn { display: block; width: 100%; margin-top: 22px; background: #f6c215; border: none; color: #1a1a2e; font-size: clamp(15px, 4vw, 17px); font-weight: 800; padding: 15px; border-radius: 10px; cursor: pointer; transition: transform .1s, box-shadow .1s; }
+        .btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(246,194,21,.45); }
+        .btn:disabled { opacity: .55; cursor: not-allowed; }
+        .secure { font-size: 11px; color: #889; margin-top: 14px; }
+        .banner { padding: 14px; border-radius: 10px; font-size: 13.5px; font-weight: 600; margin-bottom: 18px; display: none; }
+        .banner.success { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; display: block; }
+        .banner.error { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; display: block; }
+        .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(26,26,46,.25); border-top-color: #1a1a2e; border-radius: 50%; animation: spin .7s linear infinite; vertical-align: -2px; margin-right: 6px; display: none; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        @media (max-width: 480px) {
+            body { padding: 10px; align-items: flex-start; }
+            .card { border-radius: 12px; }
+            .header { padding: 16px 18px; }
+            .body { padding: 18px 16px; }
+            .row { font-size: 12px; }
+            .banner { font-size: 12.5px; }
+        }
+    </style>
+</head>
+<body>
+<div class="card">
+    <div class="header">
+        <div class="logo">ISGEC <span>|</span> Heavy Engineering</div>
+        <div class="sub">Process Equipment Division — Secure Payment</div>
+    </div>
+    <div class="body">
+        {% if already_paid %}
+        <div class="banner success">&#10003; Payment already received. Thank you!</div>
+        {% elif not can_pay %}
+        <div class="banner error">
+            {% if not proposal %}Quotation for this payment link no longer exists.
+            {% else %}This payment link is currently unavailable.{% endif %}
+        </div>
+        {% else %}
+        <div id="banner" class="banner"></div>
+
+        <div class="section-label">Quotation Details</div>
+        <div class="details">
+            <div class="row"><span>Quotation No.</span><b>{{ proposal.proposal_number }}</b></div>
+            <div class="row"><span>Currency</span><b>{{ payment.currency }}</b></div>
+            <div class="row"><span>Order ID</span><b style="font-size:11px;">{{ payment.razorpay_order_id }}</b></div>
+        </div>
+
+        {% if 'capped' in (payment.error_message or '') %}
+        <div class="cap-note">
+            Demo note: full quote value {{ proposal.currency }} {{ "%.2f"|format(proposal.total_gross) }} exceeds the
+            test-mode limit, so this demo checkout charges {{ payment.currency }} {{ "%.2f"|format(payment.amount) }}.
+        </div>
+        {% endif %}
+
+        <div class="amount-block">
+            <div class="amount-label">Amount Payable</div>
+            <div class="amount">{{ payment.currency }} {{ "%.2f"|format(payment.amount) }}</div>
+        </div>
+
+        <button class="btn" id="payBtn" onclick="openCheckout()">Pay {{ payment.currency }} {{ "%.0f"|format(payment.amount) }} Now</button>
+        <span id="spin" class="spinner"></span>
+        <div class="secure">&#128274; Payments secured by Razorpay &mdash; UPI, Cards, NetBanking</div>
+        {% endif %}
+    </div>
+</div>
+
+{% if can_pay %}
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+<script>
+function setBusy(busy) {
+    const btn = document.getElementById('payBtn');
+    btn.disabled = busy;
+    document.getElementById('spin').style.display = busy ? 'inline-block' : 'none';
+}
+
+function showBanner(cls, html) {
+    const b = document.getElementById('banner');
+    b.className = 'banner ' + cls;
+    b.innerHTML = html;
+}
+
+async function reportFailure(message) {
+    try {
+        await fetch('/api/payments/{{ payment.id }}/failed', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({message: message})
+        });
+    } catch (e) {}
+}
+
+function openCheckout() {
+    const options = {
+        key: '{{ razorpay_key_id }}',
+        amount: {{ amount_paise }},
+        currency: '{{ payment.currency }}',
+        name: 'ISGEC Heavy Engineering',
+        description: 'Quotation {{ proposal.proposal_number }}',
+        order_id: '{{ payment.razorpay_order_id }}',
+        prefill: { email: '{{ customer_email }}' },
+        theme: { color: '#1a1a2e' },
+        handler: async function (resp) {
+            setBusy(true);
+            try {
+                const res = await fetch('/api/payments/verify', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(resp)
+                });
+                if (res.ok) {
+                    showBanner('success', '&#10003; Payment successful! Our team has been notified and your order is confirmed.');
+                    document.getElementById('payBtn').style.display = 'none';
+                } else {
+                    const err = await res.json().catch(() => ({}));
+                    showBanner('error', 'Payment received but verification failed: ' + (err.detail || 'please contact support.'));
+                }
+            } catch (e) {
+                showBanner('error', 'Verification request failed. Please contact support with Order ID shown above.');
+            }
+            setBusy(false);
+        },
+        modal: {
+            ondismiss: function () {
+                showBanner('error', 'Payment was cancelled. You can retry anytime using this link.');
+                reportFailure('Checkout dismissed by user');
+            }
+        }
+    };
+    const rzp = new Razorpay(options);
+    rzp.on('payment.failed', function (resp) {
+        showBanner('error', 'Payment failed: ' + (resp.error && resp.error.description ? resp.error.description : 'please retry.'));
+        reportFailure(resp.error && resp.error.description ? resp.error.description : 'payment.failed event');
+    });
+    rzp.open();
+}
+</script>
+{% endif %}
+</body>
+</html>

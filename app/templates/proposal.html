@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+{% block title %}Proposal Detail - ISGEC{% endblock %}
+{% block content %}
+<div id="proposal-container">
+    <div class="card" style="text-align:center; padding:60px;">
+        <p class="text-muted">Loading proposal details...</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const proposalId = window.location.pathname.split('/').pop();
+
+async function loadProposal() {
+    try {
+        const [res, payRes] = await Promise.all([
+            fetch(`/api/proposals/${proposalId}`),
+            fetch(`/api/payments/proposal/${proposalId}`).catch(() => null),
+        ]);
+        if (!res.ok) {
+            document.getElementById('proposal-container').innerHTML = `
+                <div class="card" style="text-align:center; padding:60px;">
+                    <p style="color:#ef4444; font-size:18px; font-weight:700;">Proposal Not Found</p>
+                    <a href="/proposals" class="btn btn-secondary btn-sm mt-3">&larr; Back to Proposals</a>
+                </div>
+            `;
+            return;
+        }
+
+        const p = await res.json();
+        let payment = null;
+        if (payRes && payRes.ok) {
+            const payData = await payRes.json().catch(() => null);
+            payment = payData ? payData.payment : null;
+        }
+
+        const fmtAmt = cur => Number(cur).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        let paymentBanner = '';
+        if (payment) {
+            const amt = `${payment.currency} ${fmtAmt(payment.amount)}`;
+            if (payment.status === 'paid') {
+                paymentBanner = `
+                <div class="proposal-section">
+                    <div style="background:#ecfdf5; border:1px solid #a7f3d0; color:#065f46; padding:14px 18px; border-radius:12px; font-weight:700; font-size:14px;">
+                        &#10003; Payment Received — ${amt}${payment.paid_at ? ` &nbsp;&bull;&nbsp; ${new Date(payment.paid_at).toLocaleString()}` : ''}
+                    </div>
+                </div>`;
+            } else if (payment.status === 'created') {
+                paymentBanner = `
+                <div class="proposal-section">
+                    <div style="background:#fffbeb; border:1px solid #fde68a; color:#92400e; padding:14px 18px; border-radius:12px; font-size:14px; display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
+                        <span><b>Payment pending</b> — ${amt} due</span>
+                        <a href="/pay/${payment.id}" target="_blank" class="btn btn-primary btn-sm" style="text-decoration:none;">Open Payment Page</a>
+                    </div>
+                </div>`;
+            } else if (payment.status === 'failed') {
+                paymentBanner = `
+                <div class="proposal-section">
+                    <div style="background:#fef2f2; border:1px solid #fecaca; color:#991b1b; padding:14px 18px; border-radius:12px; font-size:14px; display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
+                        <span><b>Payment failed</b>${payment.error_message ? ` — ${payment.error_message}` : ''}</span>
+                        <a href="/pay/${payment.id}" target="_blank" class="btn btn-secondary btn-sm" style="text-decoration:none;">Retry Payment</a>
+                    </div>
+                </div>`;
+            }
+        }
+
+        document.getElementById('proposal-container').innerHTML = `
+            <div class="page-header" style="margin-bottom:20px;">
+                <div class="page-header-title">
+                    <h1>Commercial Proposal Details</h1>
+                    <p>Proposal Ref: <span class="font-mono font-bold" style="color:var(--primary-gold-hover);">${p.proposal_number}</span></p>
+                </div>
+                <div class="flex gap-2">
+                    <a href="/proposals" class="btn btn-secondary">&larr; Back</a>
+                    <button class="btn btn-primary" onclick="window.print()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                        Print / Export PDF
+                    </button>
+                </div>
+            </div>
+
+            <div class="card proposal-document" id="printable-proposal">
+                <div class="proposal-header">
+                    <div>
+                        <div class="logo">ISGEC <span>|</span> HEAVY ENGINEERING</div>
+                        <div class="text-sm text-muted" style="font-weight:600; margin-top:2px;">Process Equipment Division (PED)</div>
+                    </div>
+                    <div style="text-align:right;">
+                        <div style="font-size:20px; font-weight:800; color:#0f172a;">${p.proposal_number}</div>
+                        <div class="text-sm text-muted mt-1">Date: ${p.created_at ? new Date(p.created_at).toLocaleDateString() : '-'}</div>
+                        <div class="text-sm text-muted">Valid Until: ${p.valid_until || '30 Days'}</div>
+                        <div class="mt-2"><span class="badge badge-${p.status}">${p.status.toUpperCase()}</span></div>
+                    </div>
+                </div>
+
+                ${paymentBanner}
+
+                <div class="proposal-section">
+                    <h4>Customer RFQ Requirement</h4>
+                    <div style="background:rgba(241, 245, 249, 0.7); padding:16px; border-radius:12px; font-size:14px; line-height:1.6; white-space:pre-wrap; border:1px solid rgba(226, 232, 240, 0.9);">${p.rfq_text}</div>
+                </div>
+
+                ${p.customer ? `
+                    <div class="proposal-section">
+                        <h4>Client Account</h4>
+                        <div class="customer-details">
+                            <span class="customer-details-label">Customer</span>
+                            <strong>${p.customer.name}</strong>
+                        </div>
+                    </div>
+                ` : ''}
+
+                <div class="proposal-section">
+                    <h4>Quoted Line Items</h4>
+                    <table class="proposal-table" style="margin-top:8px;">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>SKU</th>
+                                <th>Description / Spec</th>
+                                <th>Qty</th>
+                                <th>Unit Price (Net)</th>
+                                <th>Subtotal (Net)</th>
+                                <th>Subtotal (Gross)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${p.items && p.items.length > 0 ? p.items.map((item, i) => `
+                                <tr>
+                                    <td>${i+1}</td>
+                                    <td class="font-mono font-bold">${item.sku || '-'}</td>
+                                    <td>${item.description}</td>
+                                    <td style="font-weight:600;">${item.quantity}</td>
+                                    <td class="font-mono">${p.currency} ${Number(item.unit_price_net).toLocaleString('en-IN')}</td>
+                                    <td class="font-mono">${p.currency} ${Number(item.subtotal_net).toLocaleString('en-IN')}</td>
+                                    <td class="font-mono" style="font-weight:700;">${p.currency} ${Number(item.subtotal_gross).toLocaleString('en-IN')}</td>
+                                </tr>
+                                ${item.notes ? `<tr><td colspan="7" class="text-xs text-muted" style="padding-top:4px; padding-bottom:8px; background:rgba(248, 250, 252, 0.5);">${item.notes}</td></tr>` : ''}
+                            `).join('') : '<tr><td colspan="7" class="text-muted" style="text-align:center;">No line items</td></tr>'}
+                        </tbody>
+                        <tfoot>
+                            <tr class="total-row">
+                                <td colspan="5" style="text-align:right; font-weight:700;">Total (Net):</td>
+                                <td class="font-mono" style="font-weight:700; font-size:15px;">${p.currency} ${Number(p.total_net).toLocaleString('en-IN')}</td>
+                                <td></td>
+                            </tr>
+                            <tr class="total-row" style="background:rgba(246, 194, 21, 0.1);">
+                                <td colspan="5" style="text-align:right; font-weight:800; color:#0f172a;">Total Payable (Gross):</td>
+                                <td></td>
+                                <td class="font-mono" style="font-weight:800; font-size:16px; color:#059669;">${p.currency} ${Number(p.total_gross).toLocaleString('en-IN')}</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+
+                ${p.notes ? `
+                    <div class="proposal-section">
+                        <h4>Engineering & Commercial Notes</h4>
+                        <p style="font-size:14px; line-height:1.5;">${p.notes}</p>
+                    </div>
+                ` : ''}
+
+                <div class="proposal-section">
+                    <h4>Standard Commercial Terms & Conditions</h4>
+                    <p style="font-size:12.5px; color:#475569; line-height:1.7;">
+                        • <strong>Payment Terms:</strong> 30% advance with PO, 70% against delivery & inspection certificate.<br>
+                        • <strong>Delivery Schedule:</strong> 12-16 weeks from PO confirmation.<br>
+                        • <strong>Validity:</strong> Quotation valid for 30 calendar days.<br>
+                        • <strong>Quality & Standards:</strong> Manufactured in accordance with ASME Section VIII Div 1/2 with U-Stamp certification & ISO 9001 quality audit.<br>
+                        • <strong>Documentation:</strong> Full material test certificates (MTC 3.1) and third-party inspection (TPI) reports provided.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Action Toolbar -->
+            <div class="flex gap-3 mt-4" style="justify-content:flex-end;">
+                ${p.status === 'draft' ? `
+                    <button class="btn btn-secondary" onclick="updateStatus('sent')">
+                        Mark as Sent to Client
+                    </button>
+                ` : ''}
+                ${p.status === 'sent' ? `
+                    <button class="btn btn-primary" style="background:#10b981; border:none; color:white;" onclick="updateStatus('accepted')">
+                        Accept Proposal
+                    </button>
+                    <button class="btn btn-danger" onclick="updateStatus('rejected')">
+                        Reject Proposal
+                    </button>
+                ` : ''}
+            </div>
+
+            <!-- Cost Intelligence Panel -->
+            <div class="card" style="margin-top:20px; border:1px solid rgba(139,92,246,0.2); background:rgba(245,243,255,0.3);">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                    <h4 style="margin:0; color:#7c3aed;">Cost Intelligence</h4>
+                    <button class="btn btn-primary" style="background:#7c3aed; border:none;" onclick="runProposalEstimate()" id="p-est-btn">Generate Cost Estimate</button>
+                </div>
+                <div id="p-est-results" style="display:none;"></div>
+                <div id="p-est-placeholder" style="font-size:13px; color:#64748b;">Click to analyze cost, margin, risk, and recommended pricing for this proposal.</div>
+            </div>
+        `;
+    } catch(e) {
+        console.error(e);
+    }
+}
+
+async function updateStatus(status) {
+    const form = new FormData();
+    form.append('status', status);
+    await fetch(`/api/proposals/${proposalId}/status`, {method: 'PUT', body: form});
+    loadProposal();
+}
+
+async function runProposalEstimate() {
+    const btn = document.getElementById('p-est-btn');
+    btn.disabled = true;
+    btn.textContent = 'Estimating...';
+    try {
+        const res = await fetch(`/api/costing/estimate/proposal/${proposalId}`, {method: 'POST'});
+        const d = await res.json();
+        btn.disabled = false;
+        btn.textContent = 'Generate Cost Estimate';
+        if (d.error) { alert(d.error); return; }
+        document.getElementById('p-est-placeholder').style.display = 'none';
+        document.getElementById('p-est-results').style.display = 'block';
+        const fmt = n => Number(n).toLocaleString('en-IN', {minimumFractionDigits: 0, maximumFractionDigits: 0});
+        const riskColor = d.risk.risk_level === 'low' ? '#059669' : d.risk.risk_level === 'high' ? '#ef4444' : '#d97706';
+        document.getElementById('p-est-results').innerHTML = `
+            <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(180px,1fr)); gap:10px; margin-bottom:12px;">
+                <div style="background:#f8fafc; border-radius:10px; padding:12px;"><div style="font-size:11px; color:#64748b; font-weight:600;">PREDICTED COST</div><div style="font-size:18px; font-weight:800;">INR ${fmt(d.predicted_cost)}</div></div>
+                <div style="background:#ecfdf5; border-radius:10px; padding:12px;"><div style="font-size:11px; color:#64748b; font-weight:600;">RECOMMENDED PRICE</div><div style="font-size:18px; font-weight:800; color:#059669;">INR ${fmt(d.price.price_net)}</div></div>
+                <div style="background:#f5f3ff; border-radius:10px; padding:12px;"><div style="font-size:11px; color:#64748b; font-weight:600;">MARGIN</div><div style="font-size:18px; font-weight:800; color:#7c3aed;">${d.margin.recommended_margin_pct.toFixed(1)}%</div></div>
+                <div style="background:${riskColor}15; border-radius:10px; padding:12px;"><div style="font-size:11px; color:#64748b; font-weight:600;">RISK</div><div style="font-size:18px; font-weight:800; color:${riskColor};">${d.risk.risk_level.toUpperCase()}</div></div>
+                <div style="background:#f0f9ff; border-radius:10px; padding:12px;"><div style="font-size:11px; color:#64748b; font-weight:600;">CONFIDENCE</div><div style="font-size:18px; font-weight:800; color:#0369a1;">${(d.confidence*100).toFixed(0)}%</div></div>
+                <div style="background:#fffbeb; border-radius:10px; padding:12px;"><div style="font-size:11px; color:#64748b; font-weight:600;">CONTINGENCY</div><div style="font-size:18px; font-weight:800; color:#92400e;">${d.risk.contingency_pct}%</div></div>
+            </div>
+            <div style="font-size:12px; color:#64748b; margin-bottom:8px;"><b>Drivers:</b> ${d.drivers.join(' &bull; ')}</div>
+            ${d.llm_narrative ? `<div style="font-size:12px; color:#475569; padding:10px; background:rgba(241,245,249,0.7); border-radius:8px; line-height:1.6;">${d.llm_narrative}</div>` : ''}
+            <div style="margin-top:8px;"><a href="/costing" style="font-size:12px; color:#7c3aed; font-weight:600;">Open full Cost Intelligence &rarr;</a></div>
+        `;
+    } catch(e) {
+        btn.disabled = false;
+        btn.textContent = 'Generate Cost Estimate';
+        console.error(e);
+    }
+}
+
+loadProposal();
+</script>
+{% endblock %}

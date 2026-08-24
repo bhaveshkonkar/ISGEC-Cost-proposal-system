@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% block title %}New Proposal from RFQ - ISGEC{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div class="page-header-title">
+        <h1>New Proposal from RFQ</h1>
+        <p>Convert technical specifications & tender documents into commercial proposals</p>
+    </div>
+</div>
+
+<div class="grid grid-2">
+    <div class="card">
+        <h3>
+            <span class="flex items-center gap-2">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <line x1="12" y1="18" x2="12" y2="12" />
+                    <line x1="9" y1="15" x2="15" y2="15" />
+                </svg>
+                Customer Specification (RFQ)
+            </span>
+        </h3>
+        <form id="rfq-form" enctype="multipart/form-data">
+            <div class="form-group">
+                <label>Paste RFQ Requirement Details</label>
+                <textarea id="rfq-text" name="rfq_text" rows="7"
+                    placeholder="Paste the customer's Request for Quotation text here...
+
+Example:
+We require 2 Shell & Tube Heat Exchangers, TEMA BEM type, 25 bar design pressure, SS 316 tubes, ASME VIII Div 1, for crude oil service. Delivery to Jamnagar refinery by Q2 2026."></textarea>
+            </div>
+
+            <div class="form-group">
+                <label>Or Upload RFQ Specification File (PDF / DOCX / TXT)</label>
+                <div class="upload-zone" onclick="document.getElementById('rfq-file').click()"
+                    style="padding: 24px 16px;">
+                    <div class="upload-icon" style="font-size:32px;">📄</div>
+                    <p id="file-label" style="font-size:14px; font-weight:600; color:#334155;">Click to select file or
+                        drag & drop</p>
+                    <p class="text-xs text-muted mt-2">Supports PDF, DOCX, TXT, CSV tenders</p>
+                    <input type="file" id="rfq-file" name="rfq_file" accept=".pdf,.docx,.doc,.txt,.csv"
+                        style="display:none;" onchange="updateFileLabel(this)">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Select Customer (Optional)</label>
+                <select id="customer-select" name="customer_id">
+                    <option value="">-- Select Customer Account --</option>
+                </select>
+            </div>
+
+            <button type="submit" class="btn btn-primary" id="submit-btn"
+                style="width:100%; padding:12px; font-size:15px;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="22" y1="2" x2="11" y2="13" />
+                    <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                </svg>
+                Process RFQ & Generate Proposal
+            </button>
+        </form>
+    </div>
+
+    <div class="card" id="result-card" style="display:none;">
+        <h3>Generated Proposal</h3>
+        <div id="proposal-result"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function updateFileLabel(input) {
+        const label = document.getElementById('file-label');
+        if (input.files && input.files[0]) {
+            label.textContent = 'Selected: ' + input.files[0].name;
+            label.style.color = '#059669';
+        } else {
+            label.textContent = 'Click to select file or drag & drop';
+            label.style.color = '#334155';
+        }
+    }
+
+    async function loadCustomers() {
+        try {
+            const res = await fetch('/api/customers');
+            if (!res.ok) return;
+            const data = await res.json();
+            const select = document.getElementById('customer-select');
+            if (data.customers) {
+                data.customers.forEach(c => {
+                    const opt = document.createElement('option');
+                    opt.value = c.id;
+                    opt.textContent = c.name + (c.sector ? ` (${c.sector})` : '');
+                    select.appendChild(opt);
+                });
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    async function getErrorMessage(res) {
+        const body = await res.text();
+        try {
+            const data = JSON.parse(body);
+            return data.detail || `Request failed (${res.status})`;
+        } catch {
+            return body || `Request failed (${res.status})`;
+        }
+    }
+
+    document.getElementById('rfq-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const btn = document.getElementById('submit-btn');
+        btn.disabled = true;
+        btn.innerHTML = `
+        <svg class="animate-spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg>
+        Analyzing & Matching Products...
+    `;
+        const form = new FormData();
+        const text = document.getElementById('rfq-text').value;
+        const file = document.getElementById('rfq-file').files[0];
+        if (text) form.append('rfq_text', text);
+        if (file) form.append('rfq_file', file);
+        const cid = document.getElementById('customer-select').value;
+        if (cid) form.append('customer_id', cid);
+
+        try {
+            const res = await fetch('/api/rfq', { method: 'POST', body: form });
+            if (!res.ok) throw new Error(await getErrorMessage(res));
+            const data = await res.json();
+            if (data.proposal_id) {
+                window.location.href = `/proposal/${data.proposal_id}`;
+            } else {
+                document.getElementById('result-card').style.display = 'block';
+                document.getElementById('proposal-result').innerHTML = `<p style="color:#ef4444;">Error: ${data.detail || 'Failed to generate proposal'}</p>`;
+            }
+        } catch (err) {
+            alert('Error: ' + err.message);
+        }
+        btn.disabled = false;
+        btn.innerHTML = `
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        Process RFQ & Generate Proposal
+    `;
+    });
+
+    loadCustomers();
+</script>
+{% endblock %}
